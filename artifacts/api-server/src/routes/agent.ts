@@ -1,0 +1,155 @@
+import { Router, type IRouter } from "express";
+import { randomUUID } from "node:crypto";
+import { getRepository } from "../lib/migration-state";
+import {
+  addEvent,
+  getEvents,
+  getMigration,
+  listMigrations,
+  saveMigration,
+  saveRepository,
+} from "../lib/migration-state";
+import {
+  analyzeRepository,
+  createRepositoryWorkspace,
+  importGithubWorkspace,
+  startMigration,
+} from "../lib/repository-agent";
+
+const router: IRouter = Router();
+
+function publicRepository(repository: Awaited<ReturnType<typeof analyzeRepository>>) {
+  const { rootPath: _rootPath, ...publicData } = repository;
+  return publicData;
+}
+
+function publicMigration(migration: NonNullable<Awaited<ReturnType<typeof getMigration>>>) {
+  const { plan: _plan, impactFiles: _impactFiles, sources: _sources, changes: _changes, attempts: _attempts, remainingIssues: _remainingIssues, diff: _diff, ...publicData } = migration;
+  return publicData;
+}
+
+router.get("/dashboard", async (_req, res) => {
+  const migrations = await listMigrations();
+  res.json({
+    totalMigrations: migrations.length,
+    completedMigrations: migrations.filter((item) => ["completed", "approved"].includes(item.status)).length,
+    runningMigrations: migrations.filter((item) => ["queued", "running"].includes(item.status)).length,
+    failedMigrations: migrations.filter((item) => item.status === "failed").length,
+    recent: migrations.slice(0, 8).map(publicMigration),
+    capabilities: ["JavaScript", "TypeScript", "npm", "pnpm", "ZIP repositories", "Grok planning"],
+  });
+});
+
+router.post("/repositories/upload", async (req, res) => {
+  try {
+    const bytes = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body ?? "");
+    if (!bytes.length) return res.status(400).json({ error: "REPOSITORY_INVALID: empty upload" });
+    const filename = String(req.header("x-repository-name") ?? "repository.zip");
+    const workspace = await createRepositoryWorkspace(bytes, filename);
+    const repository = await analyzeRepository(workspace.rootPath, "zip");
+    await saveRepository(repository);
+    return res.status(201).json(publicRepository(repository));
+  } catch (error) {
+    return res.status(400).json({ error: String(error).replace(/^Error:\s*/, "") });
+  }
+});
+
+router.post("/repositories/github", async (req, res) => {
+  try {
+    const url = typeof req.body?.url === "string" ? req.body.url : "";
+    const workspace = await importGithubWorkspace(url);
+    const repository = await analyzeRepository(workspace.rootPath, "github");
+    await saveRepository(repository);
+    return res.status(201).json(publicRepository(repository));
+  } catch (error) {
+    return res.status(400).json({ error: String(error).replace(/^Error:\s*/, "") });
+  }
+});
+
+router.get("/repositories/:id", async (req, res) => {
+  const repository = await getRepository(req.params.id);
+  if (!repository) return res.status(404).json({ error: "REPOSITORY_NOT_FOUND" });
+  return res.json(publicRepository(repository));
+});
+
+router.get("/migrations", async (_req, res) => {
+  return res.json((await listMigrations()).map(publicMigration));
+});
+
+router.post("/migrations", async (req, res) => {
+  try {
+    const { repositoryId, dependency, targetMajor, mode = "agentic" } = req.body ?? {};
+    if (typeof repositoryId !== "string" || typeof dependency !== "string" || !/^\d+$/.test(String(targetMajor))) {
+      return res.status(400).json({ error: "INVALID_MIGRATION_REQUEST" });
+    }
+    const migration = await startMigration(repositoryId, dependency, String(targetMajor), mode === "baseline" ? "baseline" : "agentic");
+    return res.status(202).json(publicMigration(migration));
+  } catch (error) {
+    return res.status(400).json({ error: String(error).replace(/^Error:\s*/, "") });
+  }
+});
+
+router.get("/migrations/:id", async (req, res) => {
+  const migration = await getMigration(req.params.id);
+  if (!migration) return res.status(404).json({ error: "MIGRATION_NOT_FOUND" });
+  return res.json(publicMigration(migration));
+});
+
+router.get("/migrations/:id/events", async (req, res) => {
+  return res.json(await getEvents(req.params.id));
+});
+
+router.get("/migrations/:id/diff", async (req, res) => {
+  const migration = await getMigration(req.params.id);
+  if (!migration) return res.status(404).json({ error: "MIGRATION_NOT_FOUND" });
+  return res.json(migration.diff);
+});
+
+router.get("/migrations/:id/report", async (req, res) => {
+  const migration = await getMigration(req.params.id);
+  if (!migration) return res.status(404).json({ error: "MIGRATION_NOT_FOUND" });
+  const repository = await getRepository(migration.repositoryId);
+  return res.json({
+    migrationId: migration.id,
+    status: migration.status,
+    summary: migration.plan?.summary ?? "No final report was generated.",
+    repository: {
+      name: migration.repositoryName,
+      language: repository?.language ?? "Unknown",
+      packageManager: repository?.packageManager ?? "unsupported",
+      framework: repository?.framework ?? null,
+    },
+    impact: {
+      affectedFiles: migration.affectedFiles,
+      affectedUsages: migration.affectedUsages,
+      files: migration.impactFiles,
+    },
+    sources: migration.sources,
+    changes: migration.changes,
+    attempts: migration.attempts,
+    remainingIssues: migration.remainingIssues,
+  });
+});
+
+router.post("/migrations/:id/approve", async (req, res) => {
+  const migration = await getMigration(req.params.id);
+  if (!migration) return res.status(404).json({ error: "MIGRATION_NOT_FOUND" });
+  if (migration.status !== "completed") return res.status(409).json({ error: "MIGRATION_NOT_READY" });
+  migration.status = "approved";
+  migration.updatedAt = new Date().toISOString();
+  await saveMigration(migration);
+  await addEvent({ id: randomUUID(), migrationId: migration.id, timestamp: new Date().toISOString(), level: "success", message: "Changes approved by user" });
+  return res.json(publicMigration(migration));
+});
+
+router.post("/migrations/:id/cancel", async (req, res) => {
+  const migration = await getMigration(req.params.id);
+  if (!migration) return res.status(404).json({ error: "MIGRATION_NOT_FOUND" });
+  migration.status = "cancelled";
+  migration.updatedAt = new Date().toISOString();
+  await saveMigration(migration);
+  await addEvent({ id: randomUUID(), migrationId: migration.id, timestamp: new Date().toISOString(), level: "warning", message: "Migration cancelled by user" });
+  return res.json(publicMigration(migration));
+});
+
+export default router;

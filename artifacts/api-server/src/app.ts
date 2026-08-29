@@ -26,6 +26,12 @@ app.use(
   }),
 );
 app.use(cors());
+app.use(
+  express.raw({
+    type: ["application/zip", "application/octet-stream"],
+    limit: "30mb",
+  }),
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
