@@ -28,7 +28,7 @@ app.use(
 app.use(cors());
 app.use(
   express.raw({
-    type: ["application/zip", "application/octet-stream"],
+    type: ["application/zip", "application/octet-stream", "multipart/form-data"],
     limit: "30mb",
   }),
 );

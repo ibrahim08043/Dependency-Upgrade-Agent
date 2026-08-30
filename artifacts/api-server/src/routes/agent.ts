@@ -18,6 +18,23 @@ import {
 
 const router: IRouter = Router();
 
+function readUploadedZip(body: unknown, contentType: string | undefined): { bytes: Buffer; filename: string } {
+  if (!Buffer.isBuffer(body)) return { bytes: Buffer.alloc(0), filename: "repository.zip" };
+  if (!contentType?.startsWith("multipart/form-data")) return { bytes: body, filename: "repository.zip" };
+  const boundary = contentType.match(/boundary=([^;]+)/)?.[1];
+  if (!boundary) throw new Error("REPOSITORY_INVALID: multipart boundary is missing");
+  const marker = Buffer.from(`--${boundary}`);
+  const headerEnd = body.indexOf(Buffer.from("\r\n\r\n"));
+  if (headerEnd < 0) throw new Error("REPOSITORY_INVALID: multipart file header is missing");
+  const header = body.subarray(0, headerEnd).toString("utf8");
+  const fileStart = headerEnd + 4;
+  const fileEnd = body.indexOf(Buffer.from(`\r\n--${boundary}`), fileStart);
+  if (fileEnd < 0) throw new Error("REPOSITORY_INVALID: multipart file payload is missing");
+  if (!header.includes('name="file"')) throw new Error("REPOSITORY_INVALID: upload field must be file");
+  const filename = header.match(/filename="([^"]+)"/)?.[1] ?? "repository.zip";
+  return { bytes: body.subarray(fileStart, fileEnd), filename };
+}
+
 function publicRepository(repository: Awaited<ReturnType<typeof analyzeRepository>>) {
   const { rootPath: _rootPath, ...publicData } = repository;
   return publicData;
@@ -42,9 +59,10 @@ router.get("/dashboard", async (_req, res) => {
 
 router.post("/repositories/upload", async (req, res) => {
   try {
-    const bytes = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body ?? "");
+    const upload = readUploadedZip(req.body, req.header("content-type"));
+    const bytes = upload.bytes;
     if (!bytes.length) return res.status(400).json({ error: "REPOSITORY_INVALID: empty upload" });
-    const filename = String(req.header("x-repository-name") ?? "repository.zip");
+    const filename = String(req.header("x-repository-name") ?? upload.filename);
     const workspace = await createRepositoryWorkspace(bytes, filename);
     const repository = await analyzeRepository(workspace.rootPath, "zip");
     await saveRepository(repository);

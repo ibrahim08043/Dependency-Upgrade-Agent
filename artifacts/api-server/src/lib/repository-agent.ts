@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { ReplitConnectors } from "@replit/connectors-sdk";
 import { logger } from "./logger";
 import {
   addEvent,
@@ -98,10 +99,6 @@ async function listFiles(rootPath: string, current = rootPath): Promise<string[]
   return files;
 }
 
-function packageManagerFor(rootPath: string): PackageManager {
-  return "pnpm";
-}
-
 export async function analyzeRepository(
   rootPath: string,
   source: "zip" | "github",
@@ -146,7 +143,13 @@ export async function analyzeRepository(
     name,
     source,
     language,
-    packageManager: packageRoot ? packageManagerFor(packageRoot) : "unsupported",
+    packageManager: packageRoot
+      ? lockfile?.endsWith("pnpm-lock.yaml")
+        ? "pnpm"
+        : lockfile?.endsWith("yarn.lock")
+          ? "unsupported"
+          : "npm"
+      : "unsupported",
     hasPackageJson: Boolean(packageRoot),
     lockfile,
     framework,
@@ -180,8 +183,7 @@ export async function createRepositoryWorkspace(
   }
   const extracted = await runCommand("unzip", ["-q", archive, "-d", originalPath], jobRoot);
   if (extracted.code !== 0) throw new Error("REPOSITORY_INVALID: ZIP extraction failed");
-  const originalRoot = (await findPackageRoot(originalPath)) ? originalPath : originalPath;
-  const copied = await runCommand("cp", ["-a", `${originalRoot}/.`, `${workPath}/`], jobRoot);
+  const copied = await runCommand("cp", ["-a", `${originalPath}/.`, `${workPath}/`], jobRoot);
   if (copied.code !== 0) throw new Error("REPOSITORY_INVALID: working copy could not be created");
   return { rootPath: workPath, originalPath };
 }
@@ -197,10 +199,17 @@ export async function importGithubWorkspace(url: string): Promise<{ rootPath: st
   const parts = parsed.pathname.split("/").filter(Boolean);
   if (parts.length < 2) throw new Error("REPOSITORY_INVALID: GitHub URL must include owner and repository");
   const repo = parts[1].replace(/\.git$/, "");
-  const zipUrl = `https://codeload.github.com/${encodeURIComponent(parts[0])}/${encodeURIComponent(repo)}/zip/refs/heads/HEAD`;
-  const response = await fetch(zipUrl, {
-    headers: process.env.GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : undefined,
+  const authHeaders = process.env.GITHUB_TOKEN
+    ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, "User-Agent": "dependency-upgrade-agent" }
+    : { "User-Agent": "dependency-upgrade-agent" };
+  const metadataResponse = await fetch(`https://api.github.com/repos/${encodeURIComponent(parts[0])}/${encodeURIComponent(repo)}`, {
+    headers: { ...authHeaders, Accept: "application/vnd.github+json" },
   });
+  if (!metadataResponse.ok) throw new Error(`REPOSITORY_INVALID: GitHub returned ${metadataResponse.status}`);
+  const metadata = (await metadataResponse.json()) as { default_branch?: string };
+  const branch = metadata.default_branch ?? "main";
+  const zipUrl = `https://codeload.github.com/${encodeURIComponent(parts[0])}/${encodeURIComponent(repo)}/zip/refs/heads/${encodeURIComponent(branch)}`;
+  const response = await fetch(zipUrl, { headers: authHeaders });
   if (!response.ok) throw new Error(`REPOSITORY_INVALID: GitHub returned ${response.status}`);
   return createRepositoryWorkspace(Buffer.from(await response.arrayBuffer()), `${repo}.zip`);
 }
@@ -252,13 +261,17 @@ async function researchDependency(dependency: string, targetMajor: string): Prom
 }
 
 async function callGrok(prompt: string): Promise<string> {
-  const apiKey = process.env.XAI_API_KEY;
-  if (!apiKey) throw new Error("GROK_API_ERROR: XAI_API_KEY is not configured");
-  const response = await fetch("https://api.x.ai/v1/chat/completions", {
+  const connectors = new ReplitConnectors();
+  const modelsResponse = await connectors.proxy("xai", "/v1/models", { method: "GET" });
+  if (!modelsResponse.ok) throw new Error(`GROK_API_ERROR: xAI models endpoint returned ${modelsResponse.status}`);
+  const modelsPayload = (await modelsResponse.json()) as { data?: Array<{ id?: string }> };
+  const model = modelsPayload.data?.find((item) => item.id?.toLowerCase().includes("grok"))?.id;
+  if (!model) throw new Error("GROK_API_ERROR: no Grok model is available for this xAI connection");
+  const response = await connectors.proxy("xai", "/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: process.env.XAI_MODEL ?? "grok-3-mini",
+      model,
       temperature: 0,
       messages: [
         { role: "system", content: "You are a senior migration engineer. Return concise, factual JSON only." },
@@ -395,21 +408,16 @@ export async function runMigration(migrationId: string): Promise<void> {
     }
     const manager = repository.packageManager === "npm" ? "npm" : repository.packageManager === "pnpm" ? "pnpm" : null;
     if (!manager) throw new Error("UNSUPPORTED_PACKAGE_MANAGER: only npm and pnpm are supported");
-    const install = await runCommand(manager, [
-      manager === "npm" ? "install" : "add",
-      `${migration.dependency}@^${migration.targetVersion.split(".")[0]}.0.0`,
-    ], repository.rootPath);
-    if (install.code !== 0) throw new Error(`DEPENDENCY_INSTALL_FAILURE: ${install.stderr || install.stdout}`.slice(0, 1800));
     await runCommand("git", ["init"], repository.rootPath);
     await runCommand("git", ["config", "user.email", "agent@localhost"], repository.rootPath);
     await runCommand("git", ["config", "user.name", "Dependency Agent"], repository.rootPath);
     await runCommand("git", ["add", "-A"], repository.rootPath);
     await runCommand("git", ["commit", "-m", "baseline"], repository.rootPath);
-    const secondInstall = await runCommand(manager, [
+    const install = await runCommand(manager, [
       manager === "npm" ? "install" : "add",
       `${migration.dependency}@^${migration.targetVersion.split(".")[0]}.0.0`,
     ], repository.rootPath);
-    if (secondInstall.code !== 0) throw new Error(`DEPENDENCY_INSTALL_FAILURE: ${secondInstall.stderr || secondInstall.stdout}`.slice(0, 1800));
+    if (install.code !== 0) throw new Error(`DEPENDENCY_INSTALL_FAILURE: ${install.stderr || install.stdout}`.slice(0, 1800));
     migration.changes = [`Updated ${migration.dependency} using ${manager} to ^${migration.targetVersion.split(".")[0]}.0.0`];
     migration.attemptNumber = 1;
     await update("verification", "Running repository verification commands");

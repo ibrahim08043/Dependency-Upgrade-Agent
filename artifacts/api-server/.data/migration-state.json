@@ -1,0 +1,218 @@
+{
+  "repositories": [
+    {
+      "id": "86c36e5d-ffe4-49cb-9241-20212bd490e6",
+      "name": "workspace",
+      "source": "github",
+      "language": "TypeScript",
+      "packageManager": "pnpm",
+      "hasPackageJson": true,
+      "lockfile": "channel-doctor-main/pnpm-lock.yaml",
+      "framework": null,
+      "dependencies": [
+        {
+          "name": "typescript",
+          "version": "~5.9.2",
+          "section": "devDependencies"
+        },
+        {
+          "name": "prettier",
+          "version": "^3.8.1",
+          "section": "devDependencies"
+        }
+      ],
+      "scripts": [
+        "build",
+        "typecheck",
+        "dev:backend",
+        "dev:frontend"
+      ],
+      "status": "analyzed",
+      "createdAt": "2026-08-30T07:17:06.511Z",
+      "rootPath": "/tmp/dependency-agent/b0d68b6d-e90f-4923-acb1-ef56318a9a21/workspace/channel-doctor-main"
+    },
+    {
+      "id": "5e27bb54-9ec3-4b54-963b-ba2e72849ea5",
+      "name": "smoke-repo",
+      "source": "zip",
+      "language": "JavaScript",
+      "packageManager": "npm",
+      "hasPackageJson": true,
+      "lockfile": null,
+      "framework": null,
+      "dependencies": [
+        {
+          "name": "axios",
+          "version": "^0.27.2",
+          "section": "dependencies"
+        }
+      ],
+      "scripts": [
+        "test"
+      ],
+      "status": "analyzed",
+      "createdAt": "2026-08-30T07:10:07.487Z",
+      "rootPath": "/tmp/dependency-agent/8a6950b8-5080-4006-a1f2-4b684794a063/workspace"
+    }
+  ],
+  "migrations": [
+    {
+      "id": "762cb1df-2ad6-4632-b145-cdae9d24f8c2",
+      "repositoryId": "86c36e5d-ffe4-49cb-9241-20212bd490e6",
+      "repositoryName": "workspace",
+      "dependency": "typescript",
+      "oldVersion": "~5.9.2",
+      "targetVersion": "5.9.3",
+      "mode": "agentic",
+      "status": "failed",
+      "currentStage": "failed",
+      "attemptNumber": 0,
+      "affectedFiles": 1,
+      "affectedUsages": 1,
+      "tests": "running",
+      "build": "running",
+      "typecheck": "running",
+      "lint": "running",
+      "errorCode": "Error",
+      "createdAt": "2026-08-30T07:17:09.981Z",
+      "updatedAt": "2026-08-30T07:17:10.967Z",
+      "plan": null,
+      "impactFiles": [
+        "lib/api-spec/orval.config.ts"
+      ],
+      "sources": [
+        {
+          "title": "typescript npm registry metadata",
+          "url": "https://registry.npmjs.org/typescript",
+          "finding": "Registry metadata was fetched successfully. The highest discovered 5.x version is 5.9.3; latest published version is 7.0.2. Review the package's official migration guide before approving."
+        }
+      ],
+      "changes": [],
+      "attempts": [],
+      "remainingIssues": [
+        "Error: GROK_API_ERROR: xAI models endpoint returned 400"
+      ],
+      "diff": {
+        "filesChanged": 0,
+        "additions": 0,
+        "deletions": 0,
+        "files": []
+      }
+    },
+    {
+      "id": "357972cd-7ae4-4983-bca8-dccc17694a9e",
+      "repositoryId": "5e27bb54-9ec3-4b54-963b-ba2e72849ea5",
+      "repositoryName": "smoke-repo",
+      "dependency": "axios",
+      "oldVersion": "^0.27.2",
+      "targetVersion": "1.20.0",
+      "mode": "agentic",
+      "status": "failed",
+      "currentStage": "failed",
+      "attemptNumber": 0,
+      "affectedFiles": 1,
+      "affectedUsages": 3,
+      "tests": "running",
+      "build": "running",
+      "typecheck": "running",
+      "lint": "running",
+      "errorCode": "Error",
+      "createdAt": "2026-08-30T07:10:16.745Z",
+      "updatedAt": "2026-08-30T07:10:17.305Z",
+      "plan": null,
+      "impactFiles": [
+        "src/index.js"
+      ],
+      "sources": [
+        {
+          "title": "axios npm registry metadata",
+          "url": "https://registry.npmjs.org/axios",
+          "finding": "Registry metadata was fetched successfully. The highest discovered 1.x version is 1.20.0; latest published version is 1.20.0. Review the package's official migration guide before approving."
+        }
+      ],
+      "changes": [],
+      "attempts": [],
+      "remainingIssues": [
+        "Error: GROK_API_ERROR: xAI models endpoint returned 400"
+      ],
+      "diff": {
+        "filesChanged": 0,
+        "additions": 0,
+        "deletions": 0,
+        "files": []
+      }
+    }
+  ],
+  "events": [
+    {
+      "id": "3f092a79-e346-4916-aebc-f1cbe670be53",
+      "migrationId": "357972cd-7ae4-4983-bca8-dccc17694a9e",
+      "timestamp": "2026-08-30T07:10:16.750Z",
+      "level": "info",
+      "message": "Migration queued"
+    },
+    {
+      "id": "054cf2fe-9da5-408f-9b35-f59731470b67",
+      "migrationId": "357972cd-7ae4-4983-bca8-dccc17694a9e",
+      "timestamp": "2026-08-30T07:10:16.754Z",
+      "level": "info",
+      "message": "Starting migration research"
+    },
+    {
+      "id": "e317dd8f-ac8a-4413-9c1e-3297ea0bc94f",
+      "migrationId": "357972cd-7ae4-4983-bca8-dccc17694a9e",
+      "timestamp": "2026-08-30T07:10:16.757Z",
+      "level": "success",
+      "message": "Found 3 potentially affected usages in 1 files"
+    },
+    {
+      "id": "746d8478-93bc-44ef-a008-3c858b1e1f48",
+      "migrationId": "357972cd-7ae4-4983-bca8-dccc17694a9e",
+      "timestamp": "2026-08-30T07:10:16.895Z",
+      "level": "success",
+      "message": "Fetched npm registry metadata for axios"
+    },
+    {
+      "id": "44e5930a-f316-476b-a357-0afb59ae2289",
+      "migrationId": "357972cd-7ae4-4983-bca8-dccc17694a9e",
+      "timestamp": "2026-08-30T07:10:17.306Z",
+      "level": "error",
+      "message": "Error: GROK_API_ERROR: xAI models endpoint returned 400"
+    },
+    {
+      "id": "65adb01e-bc87-4c0d-87de-78bf30439b86",
+      "migrationId": "762cb1df-2ad6-4632-b145-cdae9d24f8c2",
+      "timestamp": "2026-08-30T07:17:09.982Z",
+      "level": "info",
+      "message": "Migration queued"
+    },
+    {
+      "id": "68beee78-9958-4514-9343-f02c7f551f7d",
+      "migrationId": "762cb1df-2ad6-4632-b145-cdae9d24f8c2",
+      "timestamp": "2026-08-30T07:17:09.984Z",
+      "level": "info",
+      "message": "Starting migration research"
+    },
+    {
+      "id": "ffd30ca4-ffa1-46f1-b086-0c8557359443",
+      "migrationId": "762cb1df-2ad6-4632-b145-cdae9d24f8c2",
+      "timestamp": "2026-08-30T07:17:10.105Z",
+      "level": "success",
+      "message": "Found 1 potentially affected usages in 1 files"
+    },
+    {
+      "id": "d90ef198-1958-46e8-988f-f880cc2fbcf9",
+      "migrationId": "762cb1df-2ad6-4632-b145-cdae9d24f8c2",
+      "timestamp": "2026-08-30T07:17:10.514Z",
+      "level": "success",
+      "message": "Fetched npm registry metadata for typescript"
+    },
+    {
+      "id": "65a5e16d-0dd5-4f7f-81dd-c1c7e836d8f0",
+      "migrationId": "762cb1df-2ad6-4632-b145-cdae9d24f8c2",
+      "timestamp": "2026-08-30T07:17:10.969Z",
+      "level": "error",
+      "message": "Error: GROK_API_ERROR: xAI models endpoint returned 400"
+    }
+  ]
+}
