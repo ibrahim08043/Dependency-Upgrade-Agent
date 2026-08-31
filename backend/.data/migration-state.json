@@ -1,0 +1,1273 @@
+{
+  "repositories": [
+    {
+      "id": "27858c52-37d6-41c7-89d8-55f8484eea49",
+      "name": "workspace",
+      "source": "github",
+      "language": "TypeScript",
+      "packageManager": "pnpm",
+      "hasPackageJson": true,
+      "lockfile": "channel-doctor-main/pnpm-lock.yaml",
+      "framework": null,
+      "dependencies": [
+        {
+          "name": "typescript",
+          "version": "~5.9.2",
+          "section": "devDependencies"
+        },
+        {
+          "name": "prettier",
+          "version": "^3.8.1",
+          "section": "devDependencies"
+        }
+      ],
+      "scripts": [
+        "build",
+        "typecheck",
+        "dev:backend",
+        "dev:frontend"
+      ],
+      "status": "analyzed",
+      "createdAt": "2026-08-30T15:12:44.373Z",
+      "rootPath": "C:\\Users\\ibrah\\AppData\\Local\\Temp\\dependency-agent\\repo-Gw1khr\\workspace\\channel-doctor-main"
+    },
+    {
+      "id": "ca121736-27d9-4d61-9519-609d513bd2de",
+      "name": "workspace",
+      "source": "github",
+      "language": "TypeScript",
+      "packageManager": "pnpm",
+      "hasPackageJson": true,
+      "lockfile": "channel-doctor-main/pnpm-lock.yaml",
+      "framework": null,
+      "dependencies": [
+        {
+          "name": "typescript",
+          "version": "~5.9.2",
+          "section": "devDependencies"
+        },
+        {
+          "name": "prettier",
+          "version": "^3.8.1",
+          "section": "devDependencies"
+        }
+      ],
+      "scripts": [
+        "build",
+        "typecheck",
+        "dev:backend",
+        "dev:frontend"
+      ],
+      "status": "analyzed",
+      "createdAt": "2026-08-30T15:12:21.134Z",
+      "rootPath": "C:\\Users\\ibrah\\AppData\\Local\\Temp\\dependency-agent\\repo-nPmm77\\workspace\\channel-doctor-main"
+    },
+    {
+      "id": "1a4db97e-ea27-4878-a97a-d08f3db2d5ba",
+      "name": "workspace",
+      "source": "github",
+      "language": "TypeScript",
+      "packageManager": "pnpm",
+      "hasPackageJson": true,
+      "lockfile": "channel-doctor-main/pnpm-lock.yaml",
+      "framework": null,
+      "dependencies": [
+        {
+          "name": "typescript",
+          "version": "~5.9.2",
+          "section": "devDependencies"
+        },
+        {
+          "name": "prettier",
+          "version": "^3.8.1",
+          "section": "devDependencies"
+        }
+      ],
+      "scripts": [
+        "build",
+        "typecheck",
+        "dev:backend",
+        "dev:frontend"
+      ],
+      "status": "analyzed",
+      "createdAt": "2026-08-30T13:23:52.970Z",
+      "rootPath": "C:\\Users\\ibrah\\AppData\\Local\\Temp\\dependency-agent\\repo-AoU07D\\workspace\\channel-doctor-main"
+    },
+    {
+      "id": "38b69576-691d-4e5d-b18e-270ad0a7ed16",
+      "name": "workspace",
+      "source": "github",
+      "language": "TypeScript",
+      "packageManager": "pnpm",
+      "hasPackageJson": true,
+      "lockfile": "channel-doctor-main/pnpm-lock.yaml",
+      "framework": null,
+      "dependencies": [
+        {
+          "name": "typescript",
+          "version": "~5.9.2",
+          "section": "devDependencies"
+        },
+        {
+          "name": "prettier",
+          "version": "^3.8.1",
+          "section": "devDependencies"
+        }
+      ],
+      "scripts": [
+        "build",
+        "typecheck",
+        "dev:backend",
+        "dev:frontend"
+      ],
+      "status": "analyzed",
+      "createdAt": "2026-08-30T13:22:22.263Z",
+      "rootPath": "C:\\Users\\ibrah\\AppData\\Local\\Temp\\dependency-agent\\repo-erJCPs\\workspace\\channel-doctor-main"
+    },
+    {
+      "id": "69a325fd-c122-4ea9-b11f-e477ad0da773",
+      "name": "workspace",
+      "source": "github",
+      "language": "TypeScript",
+      "packageManager": "pnpm",
+      "hasPackageJson": true,
+      "lockfile": "channel-doctor-main/pnpm-lock.yaml",
+      "framework": null,
+      "dependencies": [
+        {
+          "name": "typescript",
+          "version": "~5.9.2",
+          "section": "devDependencies"
+        },
+        {
+          "name": "prettier",
+          "version": "^3.8.1",
+          "section": "devDependencies"
+        }
+      ],
+      "scripts": [
+        "build",
+        "typecheck",
+        "dev:backend",
+        "dev:frontend"
+      ],
+      "status": "analyzed",
+      "createdAt": "2026-08-30T12:57:37.513Z",
+      "rootPath": "C:\\Users\\ibrah\\AppData\\Local\\Temp\\dependency-agent\\repo-CXeUYh\\workspace\\channel-doctor-main"
+    },
+    {
+      "id": "8174d857-18a8-42be-8ee1-e009d014b41a",
+      "name": "workspace",
+      "source": "github",
+      "language": "TypeScript",
+      "packageManager": "pnpm",
+      "hasPackageJson": true,
+      "lockfile": "channel-doctor-main/pnpm-lock.yaml",
+      "framework": null,
+      "dependencies": [
+        {
+          "name": "typescript",
+          "version": "~5.9.2",
+          "section": "devDependencies"
+        },
+        {
+          "name": "prettier",
+          "version": "^3.8.1",
+          "section": "devDependencies"
+        }
+      ],
+      "scripts": [
+        "build",
+        "typecheck",
+        "dev:backend",
+        "dev:frontend"
+      ],
+      "status": "analyzed",
+      "createdAt": "2026-08-30T12:54:33.857Z",
+      "rootPath": "C:\\Users\\ibrah\\AppData\\Local\\Temp\\dependency-agent\\repo-WBzi06\\workspace\\channel-doctor-main"
+    },
+    {
+      "id": "0efe9627-8ba5-4144-aca5-4a7432d79405",
+      "name": "workspace",
+      "source": "github",
+      "language": "TypeScript",
+      "packageManager": "pnpm",
+      "hasPackageJson": true,
+      "lockfile": "channel-doctor-main/pnpm-lock.yaml",
+      "framework": null,
+      "dependencies": [
+        {
+          "name": "typescript",
+          "version": "~5.9.2",
+          "section": "devDependencies"
+        },
+        {
+          "name": "prettier",
+          "version": "^3.8.1",
+          "section": "devDependencies"
+        }
+      ],
+      "scripts": [
+        "build",
+        "typecheck",
+        "dev:backend",
+        "dev:frontend"
+      ],
+      "status": "analyzed",
+      "createdAt": "2026-08-30T12:52:54.663Z",
+      "rootPath": "C:\\Users\\ibrah\\AppData\\Local\\Temp\\dependency-agent\\repo-7acPwE\\workspace\\channel-doctor-main"
+    },
+    {
+      "id": "d4f0233e-5b07-4069-9c5a-9414964bf83e",
+      "name": "smoke-repo",
+      "source": "zip",
+      "language": "JavaScript",
+      "packageManager": "npm",
+      "hasPackageJson": true,
+      "lockfile": null,
+      "framework": null,
+      "dependencies": [
+        {
+          "name": "axios",
+          "version": "^0.27.2",
+          "section": "dependencies"
+        },
+        {
+          "name": "lodash",
+          "version": "^4.17.21",
+          "section": "dependencies"
+        },
+        {
+          "name": "typescript",
+          "version": "~5.9.2",
+          "section": "devDependencies"
+        }
+      ],
+      "scripts": [
+        "test",
+        "build"
+      ],
+      "status": "analyzed",
+      "createdAt": "2026-08-30T09:55:28.221Z",
+      "rootPath": "C:\\Users\\ibrah\\AppData\\Local\\Temp\\dependency-agent\\repo-K83Qu2\\workspace"
+    },
+    {
+      "id": "86c36e5d-ffe4-49cb-9241-20212bd490e6",
+      "name": "workspace",
+      "source": "github",
+      "language": "TypeScript",
+      "packageManager": "pnpm",
+      "hasPackageJson": true,
+      "lockfile": "channel-doctor-main/pnpm-lock.yaml",
+      "framework": null,
+      "dependencies": [
+        {
+          "name": "typescript",
+          "version": "~5.9.2",
+          "section": "devDependencies"
+        },
+        {
+          "name": "prettier",
+          "version": "^3.8.1",
+          "section": "devDependencies"
+        }
+      ],
+      "scripts": [
+        "build",
+        "typecheck",
+        "dev:backend",
+        "dev:frontend"
+      ],
+      "status": "analyzed",
+      "createdAt": "2026-08-30T07:17:06.511Z",
+      "rootPath": "/tmp/dependency-agent/b0d68b6d-e90f-4923-acb1-ef56318a9a21/workspace/channel-doctor-main"
+    },
+    {
+      "id": "5e27bb54-9ec3-4b54-963b-ba2e72849ea5",
+      "name": "smoke-repo",
+      "source": "zip",
+      "language": "JavaScript",
+      "packageManager": "npm",
+      "hasPackageJson": true,
+      "lockfile": null,
+      "framework": null,
+      "dependencies": [
+        {
+          "name": "axios",
+          "version": "^0.27.2",
+          "section": "dependencies"
+        }
+      ],
+      "scripts": [
+        "test"
+      ],
+      "status": "analyzed",
+      "createdAt": "2026-08-30T07:10:07.487Z",
+      "rootPath": "/tmp/dependency-agent/8a6950b8-5080-4006-a1f2-4b684794a063/workspace"
+    }
+  ],
+  "migrations": [
+    {
+      "id": "22383492-c1fd-45e9-8a93-f887c1919ab9",
+      "repositoryId": "27858c52-37d6-41c7-89d8-55f8484eea49",
+      "repositoryName": "workspace",
+      "dependency": "typescript",
+      "oldVersion": "~5.9.2",
+      "targetVersion": "5.9.3",
+      "mode": "agentic",
+      "status": "failed",
+      "currentStage": "failed",
+      "attemptNumber": 1,
+      "affectedFiles": 1,
+      "affectedUsages": 1,
+      "tests": "skipped",
+      "build": "fail",
+      "typecheck": "fail",
+      "lint": "skipped",
+      "errorCode": "VERIFICATION_FAILURE",
+      "createdAt": "2026-08-30T15:12:47.602Z",
+      "updatedAt": "2026-08-30T15:12:52.967Z",
+      "plan": null,
+      "impactFiles": [
+        "lib/api-spec/orval.config.ts"
+      ],
+      "sources": [
+        {
+          "title": "typescript npm registry metadata",
+          "url": "https://registry.npmjs.org/typescript",
+          "finding": "Registry metadata was fetched successfully. The highest discovered 5.x version is 5.9.3; latest published version is 7.0.2. Review the package's official migration guide before approving."
+        }
+      ],
+      "changes": [
+        "Updated typescript using pnpm to ^5.0.0"
+      ],
+      "attempts": [
+        {
+          "number": 1,
+          "result": "FAIL",
+          "diagnosis": "Manifest edit also failed: Cannot use 'in' operator to search for 'typescript' in undefined",
+          "filesChanged": 0
+        }
+      ],
+      "remainingIssues": [
+        "Manifest edit also failed: Cannot use 'in' operator to search for 'typescript' in undefined",
+        "Dependency install via pnpm failed: ",
+        "GrokConfigError: GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable the agent.",
+        "build: ",
+        "typecheck: "
+      ],
+      "diff": {
+        "filesChanged": 0,
+        "additions": 0,
+        "deletions": 0,
+        "files": []
+      },
+      "agentState": {
+        "toolCalls": [],
+        "filesInspected": [],
+        "filesModified": [],
+        "patchesApplied": 0,
+        "fileChanges": [],
+        "status": "failed",
+        "currentAction": "failed",
+        "error": "GrokConfigError: GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable the agent."
+      }
+    },
+    {
+      "id": "5bfdcf58-5d00-401f-a0e1-a6a06b592666",
+      "repositoryId": "1a4db97e-ea27-4878-a97a-d08f3db2d5ba",
+      "repositoryName": "workspace",
+      "dependency": "typescript",
+      "oldVersion": "~5.9.2",
+      "targetVersion": "5.9.3",
+      "mode": "agentic",
+      "status": "failed",
+      "currentStage": "failed",
+      "attemptNumber": 1,
+      "affectedFiles": 1,
+      "affectedUsages": 1,
+      "tests": "skipped",
+      "build": "fail",
+      "typecheck": "fail",
+      "lint": "skipped",
+      "errorCode": "VERIFICATION_FAILURE",
+      "createdAt": "2026-08-30T13:24:00.598Z",
+      "updatedAt": "2026-08-30T13:24:05.729Z",
+      "plan": null,
+      "impactFiles": [
+        "lib/api-spec/orval.config.ts"
+      ],
+      "sources": [
+        {
+          "title": "typescript npm registry metadata",
+          "url": "https://registry.npmjs.org/typescript",
+          "finding": "Registry metadata was fetched successfully. The highest discovered 5.x version is 5.9.3; latest published version is 7.0.2. Review the package's official migration guide before approving."
+        }
+      ],
+      "changes": [
+        "Updated typescript using pnpm to ^5.0.0"
+      ],
+      "attempts": [
+        {
+          "number": 1,
+          "result": "FAIL",
+          "diagnosis": "Manifest edit also failed: Cannot use 'in' operator to search for 'typescript' in undefined",
+          "filesChanged": 0
+        }
+      ],
+      "remainingIssues": [
+        "Manifest edit also failed: Cannot use 'in' operator to search for 'typescript' in undefined",
+        "Dependency install via pnpm failed: ",
+        "GrokConfigError: GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable the agent.",
+        "build: ",
+        "typecheck: "
+      ],
+      "diff": {
+        "filesChanged": 0,
+        "additions": 0,
+        "deletions": 0,
+        "files": []
+      },
+      "agentState": {
+        "toolCalls": [],
+        "filesInspected": [],
+        "filesModified": [],
+        "patchesApplied": 0,
+        "fileChanges": [],
+        "status": "failed",
+        "currentAction": "failed",
+        "error": "GrokConfigError: GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable the agent."
+      }
+    },
+    {
+      "id": "b2e08bfa-9939-4bc5-9a34-d7d2dc88b1fe",
+      "repositoryId": "38b69576-691d-4e5d-b18e-270ad0a7ed16",
+      "repositoryName": "workspace",
+      "dependency": "typescript",
+      "oldVersion": "~5.9.2",
+      "targetVersion": "5.9.3",
+      "mode": "baseline",
+      "status": "failed",
+      "currentStage": "failed",
+      "attemptNumber": 1,
+      "affectedFiles": 1,
+      "affectedUsages": 1,
+      "tests": "skipped",
+      "build": "fail",
+      "typecheck": "fail",
+      "lint": "skipped",
+      "errorCode": "VERIFICATION_FAILURE",
+      "createdAt": "2026-08-30T13:22:32.693Z",
+      "updatedAt": "2026-08-30T13:22:36.530Z",
+      "plan": null,
+      "impactFiles": [
+        "lib/api-spec/orval.config.ts"
+      ],
+      "sources": [
+        {
+          "title": "typescript npm registry metadata",
+          "url": "https://registry.npmjs.org/typescript",
+          "finding": "Registry metadata was fetched successfully. The highest discovered 5.x version is 5.9.3; latest published version is 7.0.2. Review the package's official migration guide before approving."
+        }
+      ],
+      "changes": [
+        "Updated typescript using pnpm to ^5.0.0"
+      ],
+      "attempts": [
+        {
+          "number": 1,
+          "result": "FAIL",
+          "diagnosis": "Manifest edit also failed: Cannot use 'in' operator to search for 'typescript' in undefined",
+          "filesChanged": 0
+        }
+      ],
+      "remainingIssues": [
+        "Manifest edit also failed: Cannot use 'in' operator to search for 'typescript' in undefined",
+        "Dependency install via pnpm failed: ",
+        "GrokConfigError: GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable the agent.",
+        "build: ",
+        "typecheck: "
+      ],
+      "diff": {
+        "filesChanged": 0,
+        "additions": 0,
+        "deletions": 0,
+        "files": []
+      },
+      "agentState": {
+        "toolCalls": [],
+        "filesInspected": [],
+        "filesModified": [],
+        "patchesApplied": 0,
+        "fileChanges": [],
+        "status": "failed",
+        "currentAction": "failed",
+        "error": "GrokConfigError: GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable the agent."
+      }
+    },
+    {
+      "id": "4cc62e4d-e63a-4c81-9c0a-0bb1612f55cb",
+      "repositoryId": "69a325fd-c122-4ea9-b11f-e477ad0da773",
+      "repositoryName": "workspace",
+      "dependency": "typescript",
+      "oldVersion": "~5.9.2",
+      "targetVersion": "5.9.3",
+      "mode": "agentic",
+      "status": "failed",
+      "currentStage": "failed",
+      "attemptNumber": 1,
+      "affectedFiles": 1,
+      "affectedUsages": 1,
+      "tests": "skipped",
+      "build": "fail",
+      "typecheck": "fail",
+      "lint": "skipped",
+      "errorCode": "VERIFICATION_FAILURE",
+      "createdAt": "2026-08-30T12:57:39.734Z",
+      "updatedAt": "2026-08-30T12:57:44.982Z",
+      "plan": null,
+      "impactFiles": [
+        "lib/api-spec/orval.config.ts"
+      ],
+      "sources": [
+        {
+          "title": "typescript npm registry metadata",
+          "url": "https://registry.npmjs.org/typescript",
+          "finding": "Registry metadata was fetched successfully. The highest discovered 5.x version is 5.9.3; latest published version is 7.0.2. Review the package's official migration guide before approving."
+        }
+      ],
+      "changes": [
+        "Updated typescript using pnpm to ^5.0.0"
+      ],
+      "attempts": [
+        {
+          "number": 1,
+          "result": "FAIL",
+          "diagnosis": "Manifest edit also failed: Cannot use 'in' operator to search for 'typescript' in undefined",
+          "filesChanged": 0
+        }
+      ],
+      "remainingIssues": [
+        "Manifest edit also failed: Cannot use 'in' operator to search for 'typescript' in undefined",
+        "Dependency install via pnpm failed: ",
+        "GrokConfigError: GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable the agent.",
+        "build: ",
+        "typecheck: "
+      ],
+      "diff": {
+        "filesChanged": 0,
+        "additions": 0,
+        "deletions": 0,
+        "files": []
+      },
+      "agentState": {
+        "toolCalls": [],
+        "filesInspected": [],
+        "filesModified": [],
+        "patchesApplied": 0,
+        "fileChanges": [],
+        "status": "failed",
+        "currentAction": "failed",
+        "error": "GrokConfigError: GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable the agent."
+      }
+    },
+    {
+      "id": "2dd7f2e9-7897-489a-9fff-4d061bc279bd",
+      "repositoryId": "8174d857-18a8-42be-8ee1-e009d014b41a",
+      "repositoryName": "workspace",
+      "dependency": "typescript",
+      "oldVersion": "~5.9.2",
+      "targetVersion": "5.9.3",
+      "mode": "baseline",
+      "status": "failed",
+      "currentStage": "failed",
+      "attemptNumber": 0,
+      "affectedFiles": 1,
+      "affectedUsages": 1,
+      "tests": "running",
+      "build": "running",
+      "typecheck": "running",
+      "lint": "running",
+      "errorCode": "Error",
+      "createdAt": "2026-08-30T12:54:37.689Z",
+      "updatedAt": "2026-08-30T12:54:39.775Z",
+      "plan": null,
+      "impactFiles": [
+        "lib/api-spec/orval.config.ts"
+      ],
+      "sources": [
+        {
+          "title": "typescript npm registry metadata",
+          "url": "https://registry.npmjs.org/typescript",
+          "finding": "Registry metadata was fetched successfully. The highest discovered 5.x version is 5.9.3; latest published version is 7.0.2. Review the package's official migration guide before approving."
+        }
+      ],
+      "changes": [],
+      "attempts": [],
+      "remainingIssues": [
+        "Error: GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable agent planning."
+      ],
+      "diff": {
+        "filesChanged": 0,
+        "additions": 0,
+        "deletions": 0,
+        "files": []
+      }
+    },
+    {
+      "id": "20a0ddbe-ccf5-48c0-b7e1-76e20cd03795",
+      "repositoryId": "0efe9627-8ba5-4144-aca5-4a7432d79405",
+      "repositoryName": "workspace",
+      "dependency": "typescript",
+      "oldVersion": "~5.9.2",
+      "targetVersion": "5.9.3",
+      "mode": "agentic",
+      "status": "failed",
+      "currentStage": "failed",
+      "attemptNumber": 0,
+      "affectedFiles": 1,
+      "affectedUsages": 1,
+      "tests": "running",
+      "build": "running",
+      "typecheck": "running",
+      "lint": "running",
+      "errorCode": "Error",
+      "createdAt": "2026-08-30T12:53:06.149Z",
+      "updatedAt": "2026-08-30T12:53:08.521Z",
+      "plan": null,
+      "impactFiles": [
+        "lib/api-spec/orval.config.ts"
+      ],
+      "sources": [
+        {
+          "title": "typescript npm registry metadata",
+          "url": "https://registry.npmjs.org/typescript",
+          "finding": "Registry metadata was fetched successfully. The highest discovered 5.x version is 5.9.3; latest published version is 7.0.2. Review the package's official migration guide before approving."
+        }
+      ],
+      "changes": [],
+      "attempts": [],
+      "remainingIssues": [
+        "Error: GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable agent planning."
+      ],
+      "diff": {
+        "filesChanged": 0,
+        "additions": 0,
+        "deletions": 0,
+        "files": []
+      }
+    },
+    {
+      "id": "ee624727-e2a6-46b0-8b2f-f81f2c37f935",
+      "repositoryId": "d4f0233e-5b07-4069-9c5a-9414964bf83e",
+      "repositoryName": "smoke-repo",
+      "dependency": "typescript",
+      "oldVersion": "~5.9.2",
+      "targetVersion": "5.9.3",
+      "mode": "agentic",
+      "status": "failed",
+      "currentStage": "failed",
+      "attemptNumber": 0,
+      "affectedFiles": 0,
+      "affectedUsages": 0,
+      "tests": "running",
+      "build": "running",
+      "typecheck": "running",
+      "lint": "running",
+      "errorCode": "Error",
+      "createdAt": "2026-08-30T09:55:29.232Z",
+      "updatedAt": "2026-08-30T09:55:31.150Z",
+      "plan": null,
+      "impactFiles": [],
+      "sources": [
+        {
+          "title": "typescript npm registry metadata",
+          "url": "https://registry.npmjs.org/typescript",
+          "finding": "Registry metadata was fetched successfully. The highest discovered 5.x version is 5.9.3; latest published version is 7.0.2. Review the package's official migration guide before approving."
+        }
+      ],
+      "changes": [],
+      "attempts": [],
+      "remainingIssues": [
+        "Error: GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable agent planning."
+      ],
+      "diff": {
+        "filesChanged": 0,
+        "additions": 0,
+        "deletions": 0,
+        "files": []
+      }
+    },
+    {
+      "id": "762cb1df-2ad6-4632-b145-cdae9d24f8c2",
+      "repositoryId": "86c36e5d-ffe4-49cb-9241-20212bd490e6",
+      "repositoryName": "workspace",
+      "dependency": "typescript",
+      "oldVersion": "~5.9.2",
+      "targetVersion": "5.9.3",
+      "mode": "agentic",
+      "status": "failed",
+      "currentStage": "failed",
+      "attemptNumber": 0,
+      "affectedFiles": 1,
+      "affectedUsages": 1,
+      "tests": "running",
+      "build": "running",
+      "typecheck": "running",
+      "lint": "running",
+      "errorCode": "Error",
+      "createdAt": "2026-08-30T07:17:09.981Z",
+      "updatedAt": "2026-08-30T07:17:10.967Z",
+      "plan": null,
+      "impactFiles": [
+        "lib/api-spec/orval.config.ts"
+      ],
+      "sources": [
+        {
+          "title": "typescript npm registry metadata",
+          "url": "https://registry.npmjs.org/typescript",
+          "finding": "Registry metadata was fetched successfully. The highest discovered 5.x version is 5.9.3; latest published version is 7.0.2. Review the package's official migration guide before approving."
+        }
+      ],
+      "changes": [],
+      "attempts": [],
+      "remainingIssues": [
+        "Error: GROK_API_ERROR: xAI models endpoint returned 400"
+      ],
+      "diff": {
+        "filesChanged": 0,
+        "additions": 0,
+        "deletions": 0,
+        "files": []
+      }
+    },
+    {
+      "id": "357972cd-7ae4-4983-bca8-dccc17694a9e",
+      "repositoryId": "5e27bb54-9ec3-4b54-963b-ba2e72849ea5",
+      "repositoryName": "smoke-repo",
+      "dependency": "axios",
+      "oldVersion": "^0.27.2",
+      "targetVersion": "1.20.0",
+      "mode": "agentic",
+      "status": "failed",
+      "currentStage": "failed",
+      "attemptNumber": 0,
+      "affectedFiles": 1,
+      "affectedUsages": 3,
+      "tests": "running",
+      "build": "running",
+      "typecheck": "running",
+      "lint": "running",
+      "errorCode": "Error",
+      "createdAt": "2026-08-30T07:10:16.745Z",
+      "updatedAt": "2026-08-30T07:10:17.305Z",
+      "plan": null,
+      "impactFiles": [
+        "src/index.js"
+      ],
+      "sources": [
+        {
+          "title": "axios npm registry metadata",
+          "url": "https://registry.npmjs.org/axios",
+          "finding": "Registry metadata was fetched successfully. The highest discovered 1.x version is 1.20.0; latest published version is 1.20.0. Review the package's official migration guide before approving."
+        }
+      ],
+      "changes": [],
+      "attempts": [],
+      "remainingIssues": [
+        "Error: GROK_API_ERROR: xAI models endpoint returned 400"
+      ],
+      "diff": {
+        "filesChanged": 0,
+        "additions": 0,
+        "deletions": 0,
+        "files": []
+      }
+    }
+  ],
+  "events": [
+    {
+      "id": "3f092a79-e346-4916-aebc-f1cbe670be53",
+      "migrationId": "357972cd-7ae4-4983-bca8-dccc17694a9e",
+      "timestamp": "2026-08-30T07:10:16.750Z",
+      "level": "info",
+      "message": "Migration queued"
+    },
+    {
+      "id": "054cf2fe-9da5-408f-9b35-f59731470b67",
+      "migrationId": "357972cd-7ae4-4983-bca8-dccc17694a9e",
+      "timestamp": "2026-08-30T07:10:16.754Z",
+      "level": "info",
+      "message": "Starting migration research"
+    },
+    {
+      "id": "e317dd8f-ac8a-4413-9c1e-3297ea0bc94f",
+      "migrationId": "357972cd-7ae4-4983-bca8-dccc17694a9e",
+      "timestamp": "2026-08-30T07:10:16.757Z",
+      "level": "success",
+      "message": "Found 3 potentially affected usages in 1 files"
+    },
+    {
+      "id": "746d8478-93bc-44ef-a008-3c858b1e1f48",
+      "migrationId": "357972cd-7ae4-4983-bca8-dccc17694a9e",
+      "timestamp": "2026-08-30T07:10:16.895Z",
+      "level": "success",
+      "message": "Fetched npm registry metadata for axios"
+    },
+    {
+      "id": "44e5930a-f316-476b-a357-0afb59ae2289",
+      "migrationId": "357972cd-7ae4-4983-bca8-dccc17694a9e",
+      "timestamp": "2026-08-30T07:10:17.306Z",
+      "level": "error",
+      "message": "Error: GROK_API_ERROR: xAI models endpoint returned 400"
+    },
+    {
+      "id": "65adb01e-bc87-4c0d-87de-78bf30439b86",
+      "migrationId": "762cb1df-2ad6-4632-b145-cdae9d24f8c2",
+      "timestamp": "2026-08-30T07:17:09.982Z",
+      "level": "info",
+      "message": "Migration queued"
+    },
+    {
+      "id": "68beee78-9958-4514-9343-f02c7f551f7d",
+      "migrationId": "762cb1df-2ad6-4632-b145-cdae9d24f8c2",
+      "timestamp": "2026-08-30T07:17:09.984Z",
+      "level": "info",
+      "message": "Starting migration research"
+    },
+    {
+      "id": "ffd30ca4-ffa1-46f1-b086-0c8557359443",
+      "migrationId": "762cb1df-2ad6-4632-b145-cdae9d24f8c2",
+      "timestamp": "2026-08-30T07:17:10.105Z",
+      "level": "success",
+      "message": "Found 1 potentially affected usages in 1 files"
+    },
+    {
+      "id": "d90ef198-1958-46e8-988f-f880cc2fbcf9",
+      "migrationId": "762cb1df-2ad6-4632-b145-cdae9d24f8c2",
+      "timestamp": "2026-08-30T07:17:10.514Z",
+      "level": "success",
+      "message": "Fetched npm registry metadata for typescript"
+    },
+    {
+      "id": "65a5e16d-0dd5-4f7f-81dd-c1c7e836d8f0",
+      "migrationId": "762cb1df-2ad6-4632-b145-cdae9d24f8c2",
+      "timestamp": "2026-08-30T07:17:10.969Z",
+      "level": "error",
+      "message": "Error: GROK_API_ERROR: xAI models endpoint returned 400"
+    },
+    {
+      "id": "5960ae3c-cdd3-431e-bdb2-42d5f361bad1",
+      "migrationId": "ee624727-e2a6-46b0-8b2f-f81f2c37f935",
+      "timestamp": "2026-08-30T09:55:29.234Z",
+      "level": "info",
+      "message": "Migration queued"
+    },
+    {
+      "id": "98eeb3f9-33f4-4d2b-8af5-4616d9c51e79",
+      "migrationId": "ee624727-e2a6-46b0-8b2f-f81f2c37f935",
+      "timestamp": "2026-08-30T09:55:29.241Z",
+      "level": "info",
+      "message": "Starting migration research"
+    },
+    {
+      "id": "d28a1519-806c-4065-a874-b7f769290d40",
+      "migrationId": "ee624727-e2a6-46b0-8b2f-f81f2c37f935",
+      "timestamp": "2026-08-30T09:55:29.288Z",
+      "level": "success",
+      "message": "Found 0 potentially affected usages in 0 files"
+    },
+    {
+      "id": "63902f78-2bcb-4a2e-95a3-ad5d7729922c",
+      "migrationId": "ee624727-e2a6-46b0-8b2f-f81f2c37f935",
+      "timestamp": "2026-08-30T09:55:31.148Z",
+      "level": "success",
+      "message": "Fetched npm registry metadata for typescript"
+    },
+    {
+      "id": "4cb40257-327a-4a67-976a-b90788ba0496",
+      "migrationId": "ee624727-e2a6-46b0-8b2f-f81f2c37f935",
+      "timestamp": "2026-08-30T09:55:31.153Z",
+      "level": "error",
+      "message": "Error: GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable agent planning."
+    },
+    {
+      "id": "1f19cf37-6ea2-402a-8dad-21844ee6f535",
+      "migrationId": "20a0ddbe-ccf5-48c0-b7e1-76e20cd03795",
+      "timestamp": "2026-08-30T12:53:06.161Z",
+      "level": "info",
+      "message": "Migration queued"
+    },
+    {
+      "id": "6f412a92-8ede-442e-8f5b-70e0cdaa5dcb",
+      "migrationId": "20a0ddbe-ccf5-48c0-b7e1-76e20cd03795",
+      "timestamp": "2026-08-30T12:53:06.169Z",
+      "level": "info",
+      "message": "Starting migration research"
+    },
+    {
+      "id": "21d340d2-ebb6-4f30-ad85-399d42cdb48a",
+      "migrationId": "20a0ddbe-ccf5-48c0-b7e1-76e20cd03795",
+      "timestamp": "2026-08-30T12:53:06.835Z",
+      "level": "success",
+      "message": "Found 1 potentially affected usages in 1 files"
+    },
+    {
+      "id": "d50bcb87-2927-4765-91c3-b0b17da1f850",
+      "migrationId": "20a0ddbe-ccf5-48c0-b7e1-76e20cd03795",
+      "timestamp": "2026-08-30T12:53:08.518Z",
+      "level": "success",
+      "message": "Fetched npm registry metadata for typescript"
+    },
+    {
+      "id": "4286520b-ad86-4dbd-be84-76759a41f839",
+      "migrationId": "20a0ddbe-ccf5-48c0-b7e1-76e20cd03795",
+      "timestamp": "2026-08-30T12:53:08.524Z",
+      "level": "error",
+      "message": "Error: GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable agent planning."
+    },
+    {
+      "id": "d9267995-403b-40ec-a625-40edc8e8d907",
+      "migrationId": "2dd7f2e9-7897-489a-9fff-4d061bc279bd",
+      "timestamp": "2026-08-30T12:54:37.692Z",
+      "level": "info",
+      "message": "Migration queued"
+    },
+    {
+      "id": "0f5fc95f-b337-4029-9432-a5af1005b1d5",
+      "migrationId": "2dd7f2e9-7897-489a-9fff-4d061bc279bd",
+      "timestamp": "2026-08-30T12:54:37.702Z",
+      "level": "info",
+      "message": "Starting migration research"
+    },
+    {
+      "id": "f5d82c84-01b9-42e2-9bad-732eb63f75ac",
+      "migrationId": "2dd7f2e9-7897-489a-9fff-4d061bc279bd",
+      "timestamp": "2026-08-30T12:54:38.265Z",
+      "level": "success",
+      "message": "Found 1 potentially affected usages in 1 files"
+    },
+    {
+      "id": "607d5b8d-a1c3-4e23-8605-f23d0a14c397",
+      "migrationId": "2dd7f2e9-7897-489a-9fff-4d061bc279bd",
+      "timestamp": "2026-08-30T12:54:39.772Z",
+      "level": "success",
+      "message": "Fetched npm registry metadata for typescript"
+    },
+    {
+      "id": "eba9a09e-3660-42d3-a52d-653fbeeb0390",
+      "migrationId": "2dd7f2e9-7897-489a-9fff-4d061bc279bd",
+      "timestamp": "2026-08-30T12:54:39.778Z",
+      "level": "error",
+      "message": "Error: GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable agent planning."
+    },
+    {
+      "id": "501be62f-8ca7-4cd0-844b-03ddeb412a1d",
+      "migrationId": "4cc62e4d-e63a-4c81-9c0a-0bb1612f55cb",
+      "timestamp": "2026-08-30T12:57:39.736Z",
+      "level": "info",
+      "message": "Migration queued"
+    },
+    {
+      "id": "6f25b34d-81ca-4413-841c-aaeeaf2b22e4",
+      "migrationId": "4cc62e4d-e63a-4c81-9c0a-0bb1612f55cb",
+      "timestamp": "2026-08-30T12:57:39.750Z",
+      "level": "info",
+      "message": "Starting migration research"
+    },
+    {
+      "id": "7d53e7c0-130f-41eb-b0ee-65b9f8863bef",
+      "migrationId": "4cc62e4d-e63a-4c81-9c0a-0bb1612f55cb",
+      "timestamp": "2026-08-30T12:57:40.423Z",
+      "level": "success",
+      "message": "Found 1 potentially affected usages in 1 files"
+    },
+    {
+      "id": "f4d89507-45de-4586-acb1-998f51798152",
+      "migrationId": "4cc62e4d-e63a-4c81-9c0a-0bb1612f55cb",
+      "timestamp": "2026-08-30T12:57:42.072Z",
+      "level": "success",
+      "message": "Fetched npm registry metadata for typescript"
+    },
+    {
+      "id": "9cff2759-3e26-4469-85a6-a07a1e3d1f6e",
+      "migrationId": "4cc62e4d-e63a-4c81-9c0a-0bb1612f55cb",
+      "timestamp": "2026-08-30T12:57:44.371Z",
+      "level": "info",
+      "message": "Updating the dependency with the detected package manager"
+    },
+    {
+      "id": "59b19b85-eb58-459b-82d1-da0636f7e840",
+      "migrationId": "4cc62e4d-e63a-4c81-9c0a-0bb1612f55cb",
+      "timestamp": "2026-08-30T12:57:44.383Z",
+      "level": "warning",
+      "message": "Dependency install failed via pnpm; falling back to manifest edit"
+    },
+    {
+      "id": "f44ee73f-8d10-4c8a-a28c-ef9455daa72c",
+      "migrationId": "4cc62e4d-e63a-4c81-9c0a-0bb1612f55cb",
+      "timestamp": "2026-08-30T12:57:44.391Z",
+      "level": "info",
+      "message": "Dependency updated; agent will now migrate code usages"
+    },
+    {
+      "id": "07142854-f70e-43fa-b75b-3a9a3d6cf451",
+      "migrationId": "4cc62e4d-e63a-4c81-9c0a-0bb1612f55cb",
+      "timestamp": "2026-08-30T12:57:44.588Z",
+      "level": "info",
+      "message": "Running repository verification commands"
+    },
+    {
+      "id": "8c87c99c-78aa-4c17-9e5a-9f414b4947ae",
+      "migrationId": "4cc62e4d-e63a-4c81-9c0a-0bb1612f55cb",
+      "timestamp": "2026-08-30T12:57:44.596Z",
+      "level": "error",
+      "message": "pnpm run build failed (5ms)"
+    },
+    {
+      "id": "639702c4-bb8f-4308-b348-38c00ecb9cbf",
+      "migrationId": "4cc62e4d-e63a-4c81-9c0a-0bb1612f55cb",
+      "timestamp": "2026-08-30T12:57:44.601Z",
+      "level": "error",
+      "message": "pnpm run typecheck failed (3ms)"
+    },
+    {
+      "id": "60b635db-c7b4-43e6-8e80-cfcb377d5c25",
+      "migrationId": "4cc62e4d-e63a-4c81-9c0a-0bb1612f55cb",
+      "timestamp": "2026-08-30T12:57:44.984Z",
+      "level": "error",
+      "message": "Migration stopped after verification failure"
+    },
+    {
+      "id": "8879bc5a-fa0a-4819-bf0c-bdb48c44957c",
+      "migrationId": "b2e08bfa-9939-4bc5-9a34-d7d2dc88b1fe",
+      "timestamp": "2026-08-30T13:22:32.696Z",
+      "level": "info",
+      "message": "Migration queued"
+    },
+    {
+      "id": "77d4dc1d-942d-481a-a6a9-8b62369165a3",
+      "migrationId": "b2e08bfa-9939-4bc5-9a34-d7d2dc88b1fe",
+      "timestamp": "2026-08-30T13:22:32.704Z",
+      "level": "info",
+      "message": "Starting migration research"
+    },
+    {
+      "id": "55fdc439-b73b-48f1-bd28-d409acd22bd5",
+      "migrationId": "b2e08bfa-9939-4bc5-9a34-d7d2dc88b1fe",
+      "timestamp": "2026-08-30T13:22:33.381Z",
+      "level": "success",
+      "message": "Found 1 potentially affected usages in 1 files"
+    },
+    {
+      "id": "74cd007b-b9ee-498f-ad36-c6aa49791e1b",
+      "migrationId": "b2e08bfa-9939-4bc5-9a34-d7d2dc88b1fe",
+      "timestamp": "2026-08-30T13:22:34.445Z",
+      "level": "success",
+      "message": "Fetched npm registry metadata for typescript"
+    },
+    {
+      "id": "75237b32-834e-4e34-8907-b15b3fac8756",
+      "migrationId": "b2e08bfa-9939-4bc5-9a34-d7d2dc88b1fe",
+      "timestamp": "2026-08-30T13:22:36.229Z",
+      "level": "info",
+      "message": "Updating the dependency with the detected package manager"
+    },
+    {
+      "id": "e8b2315d-013a-447a-b99c-d0d815727b1c",
+      "migrationId": "b2e08bfa-9939-4bc5-9a34-d7d2dc88b1fe",
+      "timestamp": "2026-08-30T13:22:36.239Z",
+      "level": "warning",
+      "message": "Dependency install failed via pnpm; falling back to manifest edit"
+    },
+    {
+      "id": "4f430f9b-1635-4b41-868d-b67cc82d355e",
+      "migrationId": "b2e08bfa-9939-4bc5-9a34-d7d2dc88b1fe",
+      "timestamp": "2026-08-30T13:22:36.246Z",
+      "level": "info",
+      "message": "Dependency updated; agent will now migrate code usages"
+    },
+    {
+      "id": "870bbd2d-b486-486e-b01b-102fe8e8ea72",
+      "migrationId": "b2e08bfa-9939-4bc5-9a34-d7d2dc88b1fe",
+      "timestamp": "2026-08-30T13:22:36.259Z",
+      "level": "info",
+      "message": "Running repository verification commands"
+    },
+    {
+      "id": "71374653-e41b-44d1-a0ce-e486f321a2fa",
+      "migrationId": "b2e08bfa-9939-4bc5-9a34-d7d2dc88b1fe",
+      "timestamp": "2026-08-30T13:22:36.265Z",
+      "level": "error",
+      "message": "pnpm run build failed (3ms)"
+    },
+    {
+      "id": "ecbd1b63-5b9b-49a6-9697-bdcd69b123e8",
+      "migrationId": "b2e08bfa-9939-4bc5-9a34-d7d2dc88b1fe",
+      "timestamp": "2026-08-30T13:22:36.270Z",
+      "level": "error",
+      "message": "pnpm run typecheck failed (3ms)"
+    },
+    {
+      "id": "2b851ae8-3a20-41a9-9c77-1eb46676b569",
+      "migrationId": "b2e08bfa-9939-4bc5-9a34-d7d2dc88b1fe",
+      "timestamp": "2026-08-30T13:22:36.532Z",
+      "level": "error",
+      "message": "Migration stopped after verification failure"
+    },
+    {
+      "id": "9800c75a-0040-40ca-9444-0124c6c68143",
+      "migrationId": "5bfdcf58-5d00-401f-a0e1-a6a06b592666",
+      "timestamp": "2026-08-30T13:24:00.607Z",
+      "level": "info",
+      "message": "Migration queued"
+    },
+    {
+      "id": "2da604ad-ab0d-4d07-9ca6-c8ce615e43a9",
+      "migrationId": "5bfdcf58-5d00-401f-a0e1-a6a06b592666",
+      "timestamp": "2026-08-30T13:24:00.634Z",
+      "level": "info",
+      "message": "Starting migration research"
+    },
+    {
+      "id": "7f81d872-34c0-485f-b477-768671293b64",
+      "migrationId": "5bfdcf58-5d00-401f-a0e1-a6a06b592666",
+      "timestamp": "2026-08-30T13:24:01.604Z",
+      "level": "success",
+      "message": "Found 1 potentially affected usages in 1 files"
+    },
+    {
+      "id": "718708aa-a01e-4657-92f0-73780c5d87c6",
+      "migrationId": "5bfdcf58-5d00-401f-a0e1-a6a06b592666",
+      "timestamp": "2026-08-30T13:24:03.427Z",
+      "level": "success",
+      "message": "Fetched npm registry metadata for typescript"
+    },
+    {
+      "id": "9c510ae6-85f3-4d03-a5ee-136b2f6b79ac",
+      "migrationId": "5bfdcf58-5d00-401f-a0e1-a6a06b592666",
+      "timestamp": "2026-08-30T13:24:05.315Z",
+      "level": "info",
+      "message": "Updating the dependency with the detected package manager"
+    },
+    {
+      "id": "34517dac-f33a-45de-99a1-2dd1919c293f",
+      "migrationId": "5bfdcf58-5d00-401f-a0e1-a6a06b592666",
+      "timestamp": "2026-08-30T13:24:05.323Z",
+      "level": "warning",
+      "message": "Dependency install failed via pnpm; falling back to manifest edit"
+    },
+    {
+      "id": "f3234246-31cd-4d62-866f-7b8d04eea626",
+      "migrationId": "5bfdcf58-5d00-401f-a0e1-a6a06b592666",
+      "timestamp": "2026-08-30T13:24:05.328Z",
+      "level": "info",
+      "message": "Dependency updated; agent will now migrate code usages"
+    },
+    {
+      "id": "112322a0-b18f-4f00-8384-1035ae906adb",
+      "migrationId": "5bfdcf58-5d00-401f-a0e1-a6a06b592666",
+      "timestamp": "2026-08-30T13:24:05.334Z",
+      "level": "info",
+      "message": "Running repository verification commands"
+    },
+    {
+      "id": "e2e1820e-6d90-41c5-9088-344216a73ad8",
+      "migrationId": "5bfdcf58-5d00-401f-a0e1-a6a06b592666",
+      "timestamp": "2026-08-30T13:24:05.339Z",
+      "level": "error",
+      "message": "pnpm run build failed (3ms)"
+    },
+    {
+      "id": "39c2a188-18cd-411a-8a35-3227044f2a5c",
+      "migrationId": "5bfdcf58-5d00-401f-a0e1-a6a06b592666",
+      "timestamp": "2026-08-30T13:24:05.344Z",
+      "level": "error",
+      "message": "pnpm run typecheck failed (3ms)"
+    },
+    {
+      "id": "8dcc1d3b-9da5-4333-80f8-b15a6e5b2422",
+      "migrationId": "5bfdcf58-5d00-401f-a0e1-a6a06b592666",
+      "timestamp": "2026-08-30T13:24:05.731Z",
+      "level": "error",
+      "message": "Migration stopped after verification failure"
+    },
+    {
+      "id": "8eefa1ad-9ca9-4242-a5d9-f7f4d9970cc6",
+      "migrationId": "22383492-c1fd-45e9-8a93-f887c1919ab9",
+      "timestamp": "2026-08-30T15:12:47.606Z",
+      "level": "info",
+      "message": "Migration queued"
+    },
+    {
+      "id": "5f6e4b48-9b32-41fd-a079-3d99af93f4b1",
+      "migrationId": "22383492-c1fd-45e9-8a93-f887c1919ab9",
+      "timestamp": "2026-08-30T15:12:47.639Z",
+      "level": "info",
+      "message": "Starting migration research"
+    },
+    {
+      "id": "bc9231fb-1de0-4c44-9719-d106fc663245",
+      "migrationId": "22383492-c1fd-45e9-8a93-f887c1919ab9",
+      "timestamp": "2026-08-30T15:12:48.663Z",
+      "level": "success",
+      "message": "Found 1 potentially affected usages in 1 files"
+    },
+    {
+      "id": "628adebd-7445-47d4-b349-d5f06bd6f9bc",
+      "migrationId": "22383492-c1fd-45e9-8a93-f887c1919ab9",
+      "timestamp": "2026-08-30T15:12:50.387Z",
+      "level": "success",
+      "message": "Fetched npm registry metadata for typescript"
+    },
+    {
+      "id": "136261fb-fa16-489c-be03-ee8f878183f0",
+      "migrationId": "22383492-c1fd-45e9-8a93-f887c1919ab9",
+      "timestamp": "2026-08-30T15:12:52.399Z",
+      "level": "info",
+      "message": "Updating the dependency with the detected package manager"
+    },
+    {
+      "id": "3fc5057d-4f1b-4687-8ee6-bb77c9681d25",
+      "migrationId": "22383492-c1fd-45e9-8a93-f887c1919ab9",
+      "timestamp": "2026-08-30T15:12:52.412Z",
+      "level": "warning",
+      "message": "Dependency install failed via pnpm; falling back to manifest edit"
+    },
+    {
+      "id": "d407ba0d-b463-46dd-a850-05ccc469c74c",
+      "migrationId": "22383492-c1fd-45e9-8a93-f887c1919ab9",
+      "timestamp": "2026-08-30T15:12:52.425Z",
+      "level": "info",
+      "message": "Dependency updated; agent will now migrate code usages"
+    },
+    {
+      "id": "73b6b739-f623-4d7c-8753-e69cb1b9585f",
+      "migrationId": "22383492-c1fd-45e9-8a93-f887c1919ab9",
+      "timestamp": "2026-08-30T15:12:52.441Z",
+      "level": "info",
+      "message": "Running repository verification commands"
+    },
+    {
+      "id": "04b667b3-b790-4b63-b64c-052b68381944",
+      "migrationId": "22383492-c1fd-45e9-8a93-f887c1919ab9",
+      "timestamp": "2026-08-30T15:12:52.447Z",
+      "level": "error",
+      "message": "pnpm run build failed (3ms)"
+    },
+    {
+      "id": "8563a2c0-bb9f-43cb-b63a-1de165966d2f",
+      "migrationId": "22383492-c1fd-45e9-8a93-f887c1919ab9",
+      "timestamp": "2026-08-30T15:12:52.453Z",
+      "level": "error",
+      "message": "pnpm run typecheck failed (3ms)"
+    },
+    {
+      "id": "377362a6-2e1c-457b-a669-67c34339d6fb",
+      "migrationId": "22383492-c1fd-45e9-8a93-f887c1919ab9",
+      "timestamp": "2026-08-30T15:12:52.975Z",
+      "level": "error",
+      "message": "Migration stopped after verification failure"
+    }
+  ]
+}

@@ -47,3 +47,17 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Environment files (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Local state (job history)
+backend/.data/*.json
+frontend/dist
+backend/dist
+
+# esbuild/tsc artifacts
+*.tsbuildinfo
+.tmp

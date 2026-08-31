@@ -1,0 +1,120 @@
+import { GrokApiError, GrokConfigError } from "./types";
+import type {
+  ChatMessage,
+  GrokCompletionResponse,
+  GrokProvider,
+  ToolCallRequest,
+  ToolDefinition,
+} from "./types";
+
+interface XaiToolCall {
+  id?: string;
+  type?: string;
+  function?: {
+    name?: string;
+    arguments?: string;
+  };
+}
+
+interface XaiChoice {
+  message?: {
+    content?: string | Array<{ type?: string; text?: string }> | null;
+    tool_calls?: XaiToolCall[];
+  };
+  finish_reason?: string;
+}
+
+/** Default model resolved from env, overridable with XAI_MODEL. */
+const DEFAULT_MODEL = "grok-4-latest";
+
+function formatContent(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value.map((part) => (part && typeof part === "object" && "text" in part ? String((part as { text?: string }).text ?? "") : "")).join("");
+  }
+  return value == null ? "" : String(value);
+}
+
+/**
+ * Grok provider backed by the xAI chat-completions API with native
+ * function/tool calling.  Secrets are read from the PROCESS environment
+ * (XAI_API_KEY) and are never passed to the model in prompts.
+ */
+export class XaiGrokProvider implements GrokProvider {
+  private readonly apiKey: string;
+  private readonly model: string;
+  private readonly baseUrl = "https://api.x.ai/v1";
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch) {
+    const key = env.XAI_API_KEY;
+    if (!key) {
+      throw new GrokConfigError(
+        "GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable the agent.",
+      );
+    }
+    this.apiKey = key;
+    this.model = env.XAI_MODEL || DEFAULT_MODEL;
+    this.fetchImpl = fetchImpl;
+  }
+
+  isConfigured(): boolean {
+    return true;
+  }
+
+  async chat(messages: ChatMessage[], tools?: ToolDefinition[]): Promise<GrokCompletionResponse> {
+    const body: Record<string, unknown> = {
+      model: this.model,
+      temperature: 0,
+      messages: messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+        ...(m.role === "tool" ? { tool_call_id: m.tool_call_id } : {}),
+      })),
+    };
+    if (tools && tools.length > 0) {
+      body.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+    }
+
+    const response = await this.fetchImpl(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new GrokApiError(`GROK_API_ERROR: xAI returned ${response.status} ${response.statusText}`);
+    }
+    let payload: { choices?: XaiChoice[] };
+    try {
+      payload = (await response.json()) as { choices?: XaiChoice[] };
+    } catch {
+      throw new GrokApiError("GROK_API_ERROR: xAI returned an unparseable response body");
+    }
+    const choice = payload.choices?.[0];
+    const message = choice?.message;
+
+    const toolCalls: ToolCallRequest[] = [];
+    for (const call of message?.tool_calls ?? []) {
+      const id = call.id || `call_${toolCalls.length + 1}`;
+      const name = call.function?.name ?? "";
+      const argumentsRaw = call.function?.arguments ?? "";
+      if (!name) continue;
+      toolCalls.push({ id, name, arguments: argumentsRaw });
+    }
+
+    return {
+      summary: message?.content != null ? formatContent(message.content) : undefined,
+      toolCalls,
+    };
+  }
+}

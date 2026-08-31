@@ -1,19 +1,25 @@
 {
-  "name": "workspace",
+  "name": "dependency-upgrade-agent",
   "version": "0.0.0",
-  "license": "MIT",
-  "scripts": {
-    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
-    "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
-  },
   "private": true,
-  "dependencies": {
-    "@replit/connectors-sdk": "^0.4.1"
+  "license": "MIT",
+  "description": "AI-assisted dependency major-version upgrade agent: import a JS/TS repository, analyze its dependencies, run a real migration in an isolated workspace, and verify + approve the diff.",
+  "workspaces": [
+    "frontend",
+    "backend",
+    "shared/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n frontend,backend -c cyan,magenta \"npm:dev:frontend\" \"npm:dev:backend\"",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "npm --prefix backend run dev",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "typecheck": "npm --prefix backend run typecheck && npm --prefix frontend run typecheck",
+    "test": "echo \"No project test suites are registered yet (see backend/tests + frontend/tests).\""
   },
   "devDependencies": {
-    "prettier": "^3.9.6",
-    "typescript": "~5.9.3"
+    "concurrently": "^9.1.2"
   }
 }
