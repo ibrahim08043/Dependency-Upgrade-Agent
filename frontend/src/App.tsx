@@ -3,18 +3,20 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import { Link, Route, Switch, useLocation, useParams } from 'wouter';
 import {
   ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronRight, CircleDot,
-  Code2, FileArchive, FileCode2, FolderGit2, GitBranch, Github, Layers3, Loader2,
-  Menu, Play, RefreshCw, ScrollText, ShieldCheck, Terminal,
-  Upload, X, XCircle, Zap,
+  Code2, FileCode2, FolderGit2, GitBranch, Layers3, Loader2,
+  Menu, PanelLeftClose, PanelLeftOpen, Play, RefreshCw, ScrollText, ShieldCheck, Terminal,
+  XCircle, Zap,
 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   getGetDashboardQueryKey, getGetMigrationDiffQueryKey, getGetMigrationEventsQueryKey,
   getGetMigrationQueryKey, getGetMigrationReportQueryKey, getGetRepositoryQueryKey,
   getListMigrationsQueryKey, useApproveMigration, useCancelMigration,
   useCreateMigration, useGetDashboard, useGetMigration, useGetMigrationDiff,
   useGetMigrationEvents, useGetMigrationReport, useGetRepository, useImportGithubRepository,
-  useListMigrations, useUploadRepository,
-  type Migration, type MigrationAgentState, type MigrationEvent, type MigrationReport, type Repository,
+  useListMigrations, useRejectMigration,
+  type Migration, type MigrationAgentState, type MigrationEvent, type MigrationReport, type MigrationResearch,
+  type RiskSummary, type Repository, type ImpactFinding, type Attempt,
 } from '@dua/api-client-react';
 import { ErrorBoundary } from '@/components/error-boundary';
 import NotFound from '@/pages/not-found';
@@ -38,36 +40,75 @@ function StatusPill({ status }: { status?: string }) {
   return <span className={`status status-${status ?? 'cancelled'}`} data-testid={`status-${status ?? 'unknown'}`}>{statusLabel(status)}</span>;
 }
 
+const SIDEBAR_STORAGE_KEY = 'dua.sidebar.collapsed';
+
+function readCollapsedPreference(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function SidebarNavLink({ href, active, icon, label, testid, tooltip = true }: { href: string; active: boolean; icon: ReactNode; label: string; testid: string; tooltip?: boolean }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link href={href} className={`nav-link ${active ? 'active' : ''}`} data-testid={testid}>
+          {icon}
+          <span className="nav-item-label">{label}</span>
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent side="right" hidden={!tooltip}>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function Shell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(readCollapsedPreference);
   const isMigration = location.startsWith('/migration');
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_STORAGE_KEY, next ? '1' : '0');
+      } catch {
+        /* localStorage unavailable — persistence is best-effort */
+      }
+      return next;
+    });
+  };
   return (
-    <div className="app-shell">
-      <aside className={`sidebar ${mobileOpen ? 'open' : ''}`} data-testid="navigation-sidebar">
-        <div className="brand">
-          <div className="brand-mark">DU</div>
-          <div className="brand-copy"><span className="brand-name">Dependency Upgrade</span><span className="brand-tag">Agent command center</span></div>
-        </div>
-        <div className="nav-label">Workspace</div>
-        <nav className="nav" aria-label="Primary navigation">
-          <Link href="/" className={`nav-link ${location === '/' ? 'active' : ''}`} data-testid="link-dashboard"><Layers3 /> Overview</Link>
-          <Link href="/new" className={`nav-link ${location === '/new' ? 'active' : ''}`} data-testid="link-new-migration"><Zap /> New migration</Link>
-        </nav>
-        <div className="nav-label" style={{ marginTop: 28 }}>Current run</div>
-        <nav className="nav">
-          <Link href={isMigration ? location : '/'} className={`nav-link ${isMigration ? 'active' : ''}`} data-testid="link-current-run"><CircleDot /> {isMigration ? 'Migration workspace' : 'No active run'}</Link>
-        </nav>
-        <div className="sidebar-foot"><strong>AGENT STATUS</strong><span>Ready for a repository. Every change is inspectable.</span></div>
-      </aside>
-      <main className="main">
-        <header className="topbar">
-          <div className="crumb"><button className="btn btn-quiet mobile-menu" onClick={() => setMobileOpen((open) => !open)} aria-label="Toggle navigation" data-testid="button-toggle-navigation"><Menu /></button><span>Command center</span><ChevronRight size={13} /><strong>{isMigration ? 'Migration run' : location === '/new' ? 'New migration' : 'Overview'}</strong></div>
-          <div className="top-status"><span className="pulse" /> API connected</div>
-        </header>
-        {children}
-      </main>
-    </div>
+    <TooltipProvider delayDuration={0}>
+      <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
+        <aside className={`sidebar ${mobileOpen ? 'open' : ''}`} data-testid="navigation-sidebar">
+          <div className="brand">
+            <img src="/logo.png" alt="Dependency Upgrade Agent logo" className="brand-logo" />
+            <div className="brand-copy"><span className="brand-name">Dependency Upgrade</span><span className="brand-tag">Agent command center</span></div>
+          </div>
+          <div className="nav-label">Workspace</div>
+          <nav className="nav" aria-label="Primary navigation">
+            <SidebarNavLink href="/" icon={<Layers3 />} label="Overview" testid="link-dashboard" active={location === '/'} tooltip={collapsed} />
+            <SidebarNavLink href="/new" icon={<Zap />} label="New migration" testid="link-new-migration" active={location === '/new'} tooltip={collapsed} />
+          </nav>
+          <div className="nav-label" style={{ marginTop: 28 }}>Current run</div>
+          <nav className="nav">
+            <SidebarNavLink href={isMigration ? location : '/'} icon={<CircleDot />} label={isMigration ? 'Migration workspace' : 'No active run'} testid="link-current-run" active={isMigration} tooltip={collapsed} />
+          </nav>
+          <div className="sidebar-foot"><strong>AGENT STATUS</strong><span>Ready for a repository. Every change is inspectable.</span></div>
+          <button className="sidebar-toggle" onClick={toggleCollapsed} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} data-testid="button-toggle-sidebar">{collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}<span className="nav-item-label">{collapsed ? 'Expand' : 'Collapse'}</span></button>
+        </aside>
+        <main className="main">
+          <header className="topbar">
+            <div className="crumb"><button className="btn btn-quiet mobile-menu" onClick={() => setMobileOpen((open) => !open)} aria-label="Toggle navigation" data-testid="button-toggle-navigation"><Menu /></button><span>Command center</span><ChevronRight size={13} /><strong>{isMigration ? 'Migration run' : location === '/new' ? 'New migration' : 'Overview'}</strong></div>
+            <div className="top-status"><span className="pulse" /> API connected</div>
+          </header>
+          {children}
+        </main>
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -116,26 +157,17 @@ function MigrationTable({ rows }: { rows: Migration[] }) {
 
 function NewMigration() {
   const [, setLocation] = useLocation();
-  const [source, setSource] = useState<'zip' | 'github'>('zip');
-  const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState('');
   const [repo, setRepo] = useState<Repository | null>(null);
   const [dependency, setDependency] = useState('');
   const [targetMajor, setTargetMajor] = useState('');
   const [mode, setMode] = useState<'agentic' | 'baseline'>('agentic');
-  const [dragging, setDragging] = useState(false);
-  const upload = useUploadRepository();
   const github = useImportGithubRepository();
   const create = useCreateMigration();
   const repositoryQuery = useGetRepository(repo?.id ?? '', { query: { enabled: !!repo?.id, queryKey: getGetRepositoryQueryKey(repo?.id ?? '') } });
-  const isImporting = upload.isPending || github.isPending;
+  const isImporting = github.isPending;
   const isReady = !!repo && !!dependency && !!targetMajor;
 
-  const analyzeFile = (nextFile: File | null) => {
-    if (!nextFile) return;
-    setFile(nextFile);
-    upload.mutate({ data: { file: nextFile as unknown as string } }, { onSuccess: (result) => { setRepo(result); setDependency(result.dependencies[0]?.name ?? ''); setTargetMajor(result.dependencies[0]?.version.match(/\d+/)?.[0] ?? ''); } });
-  };
   const analyzeGithub = () => {
     if (!url.trim()) return;
     github.mutate({ data: { url: url.trim() } }, { onSuccess: (result) => { setRepo(result); setDependency(result.dependencies[0]?.name ?? ''); setTargetMajor(result.dependencies[0]?.version.match(/\d+/)?.[0] ?? ''); } });
@@ -148,12 +180,15 @@ function NewMigration() {
     <div className="page"><div className="form-layout">
       <div className="page-head"><div><div className="eyebrow">New migration / intake</div><h1>Bring a repository in.</h1><p className="subhead">The agent starts with a read-only analysis. Choose the dependency and target major once the repository is indexed.</p></div></div>
       <section className="card import-card">
-        <div className="source-tabs"><button className={`source-tab ${source === 'zip' ? 'active' : ''}`} onClick={() => { setSource('zip'); setRepo(null); }} data-testid="button-source-zip"><FileArchive /> Upload ZIP</button><button className={`source-tab ${source === 'github' ? 'active' : ''}`} onClick={() => { setSource('github'); setRepo(null); }} data-testid="button-source-github"><Github /> GitHub URL</button></div>
-        {source === 'zip' ? <div className={`dropzone ${dragging ? 'dragging' : ''}`} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); analyzeFile(event.dataTransfer.files[0] ?? null); }} data-testid="dropzone-repository"><div className="upload-icon">{isImporting ? <Loader2 className="animate-spin" /> : <Upload />}</div><strong>{isImporting ? 'Indexing repository…' : 'Drop a .zip here, or choose a file'}</strong><span>We inspect package.json, lockfiles, scripts, and dependency usage.</span><label className="btn btn-secondary" style={{ marginTop: 15 }}><input type="file" accept=".zip,application/zip" hidden onChange={(event) => analyzeFile(event.target.files?.[0] ?? null)} data-testid="input-repository-zip" />Choose ZIP</label></div> : <div className="url-field"><label htmlFor="github-url">Repository URL</label><input id="github-url" className="input" placeholder="https://github.com/owner/repository" value={url} onChange={(event) => setUrl(event.target.value)} data-testid="input-github-url" /><span className="helper">Public GitHub repositories are cloned for analysis; no changes are pushed.</span><button className="btn btn-primary" style={{ marginTop: 8, alignSelf: 'flex-start' }} onClick={analyzeGithub} disabled={!url.trim() || isImporting} data-testid="button-analyze-github">{isImporting ? <Loader2 className="animate-spin" /> : <GitBranch />} Analyze repository</button></div>}
-        {file && source === 'zip' ? <div className="file-chip"><FileArchive size={14} /> {file.name}<button onClick={() => { setFile(null); setRepo(null); }} aria-label="Remove selected ZIP" data-testid="button-remove-zip"><X size={14} /></button></div> : null}
-        {upload.isError || github.isError ? <div className="error-box" style={{ marginTop: 15 }} data-testid="state-import-error"><strong>Repository analysis failed</strong><p>Check the source and try again. The server returned an analysis error.</p><button className="btn btn-danger" onClick={() => { if (source === 'zip' && file) analyzeFile(file); else analyzeGithub(); }} data-testid="button-retry-import"><RefreshCw /> Retry analysis</button></div> : null}
+        <div className="url-field">
+          <label htmlFor="github-url">GitHub repository URL</label>
+          <input id="github-url" className="input" placeholder="https://github.com/owner/repository" value={url} onChange={(event) => setUrl(event.target.value)} data-testid="input-github-url" />
+          <span className="helper">Public GitHub repositories are cloned for analysis; no changes are pushed.</span>
+          <button className="btn btn-primary" style={{ marginTop: 8, alignSelf: 'flex-start' }} onClick={analyzeGithub} disabled={!url.trim() || isImporting} data-testid="button-analyze-github">{isImporting ? <Loader2 className="animate-spin" /> : <GitBranch />} Analyze repository</button>
+        </div>
+        {github.isError ? <div className="error-box" style={{ marginTop: 15 }} data-testid="state-import-error"><strong>Repository analysis failed</strong><p>Check the source and try again. The server returned an analysis error.</p><button className="btn btn-danger" onClick={analyzeGithub} data-testid="button-retry-import"><RefreshCw /> Retry analysis</button></div> : null}
         {repo ? <RepositoryDetails repo={repositoryQuery.data ?? repo} dependency={dependency} setDependency={setDependency} targetMajor={targetMajor} setTargetMajor={setTargetMajor} mode={mode} setMode={setMode} /> : null}
-        {repo ? <div className="form-actions"><button className="btn btn-quiet" onClick={() => { setRepo(null); setFile(null); }} data-testid="button-reset-repository">Choose another</button><button className="btn btn-primary" onClick={beginMigration} disabled={!isReady || create.isPending} data-testid="button-create-migration">{create.isPending ? <Loader2 className="animate-spin" /> : <Play />} Start migration <ArrowRight /></button></div> : null}
+        {repo ? <div className="form-actions"><button className="btn btn-quiet" onClick={() => { setRepo(null); }} data-testid="button-reset-repository">Choose another</button><button className="btn btn-primary" onClick={beginMigration} disabled={!isReady || create.isPending} data-testid="button-create-migration">{create.isPending ? <Loader2 className="animate-spin" /> : <Play />} Start migration <ArrowRight /></button></div> : null}
         {create.isError ? <div className="error-box" style={{ marginTop: 15 }} data-testid="state-create-error"><strong>Migration could not start</strong><p>The repository remains indexed. Review the target and retry.</p><button className="btn btn-danger" onClick={beginMigration} data-testid="button-retry-create">Try again</button></div> : null}
       </section>
     </div></div>
@@ -178,7 +213,7 @@ function Workspace() {
   const cancelRun = () => cancel.mutate({ id }, { onSuccess: (result) => { qc.setQueryData(getGetMigrationQueryKey(id), result); void events.refetch(); } });
   if (migration.isLoading) return <LoadingWorkspace />;
   if (migration.isError || !m) return <div className="page"><ErrorState message="This migration run is not available." retry={refreshAll} /></div>;
-  return <div className="page"><div className="workspace-head"><div><div className="eyebrow">Migration workspace <span className="migration-id">#{m.id}</span></div><div className="migration-title"><h1>{m.dependency}</h1><StatusPill status={m.status} /></div><div className="migration-sub"><b>{m.repositoryName}</b> · {m.oldVersion} <ArrowRight size={12} style={{ verticalAlign: 'middle' }} /> {m.targetVersion} · attempt {m.attemptNumber}</div></div><div className="workspace-actions"><button className="btn btn-quiet" onClick={refreshAll} disabled={migration.isFetching} data-testid="button-refresh-workspace"><RefreshCw className={migration.isFetching ? 'animate-spin' : ''} /> Refresh</button>{(m.status === 'running' || m.status === 'queued') ? <button className="btn btn-danger" onClick={cancelRun} disabled={cancel.isPending} data-testid="button-cancel-migration">{cancel.isPending ? <Loader2 className="animate-spin" /> : <XCircle />} Cancel run</button> : null}</div></div><StageTrack current={m.currentStage} status={m.status} activeIndex={stageIndex} /><WorkspaceNav id={id} active="workspace" /><div className="workspace-grid"><section className="card event-panel"><div className="panel-head"><div><h2>Agent event log</h2><p>Live backend events · refreshes every 4.5 seconds</p></div><span className="top-status"><span className={`pulse ${m.status === 'failed' ? 'danger-pulse' : ''}`} /> {m.status === 'running' ? 'streaming' : 'synced'}</span></div>{eventRows.length === 0 ? <div className="empty" data-testid="state-empty-events"><div className="empty-icon"><Terminal /></div><h3>Waiting for events</h3><p>The backend has not emitted an event for this run yet.</p></div> : <EventLog rows={eventRows} />}</section><div className="summary-stack">{m.agentState ? <SummaryCard title="Agent activity" icon={<Terminal />}><AgentActivity agent={m.agentState} /></SummaryCard> : null}<SummaryCard title="Impact" icon={<Code2 />}><div className="summary-stats"><div className="summary-stat"><span>Affected files</span><strong>{m.affectedFiles}</strong></div><div className="summary-stat"><span>Usages</span><strong>{m.affectedUsages}</strong></div></div></SummaryCard><SummaryCard title="Verification" icon={<ShieldCheck />}><Checks migration={m} /></SummaryCard><SummaryCard title="Artifacts" icon={<ScrollText />}><p className="helper">Inspect the actual patch and final report as soon as the agent makes them available.</p><div className="link-row"><Link href={`/migration/${id}/diff`} className="btn btn-secondary" data-testid="link-view-diff"><FileCode2 /> Diff</Link><Link href={`/migration/${id}/report`} className="btn btn-secondary" data-testid="link-view-report"><ScrollText /> Report</Link></div></SummaryCard></div></div></div>;
+  return <div className="page"><div className="workspace-head"><div><div className="eyebrow">Migration workspace <span className="migration-id">#{m.id}</span></div><div className="migration-title"><h1>{m.dependency}</h1><StatusPill status={m.status} /></div><div className="migration-sub"><b>{m.repositoryName}</b> · {m.oldVersion} <ArrowRight size={12} style={{ verticalAlign: 'middle' }} /> {m.targetVersion} · attempt {m.attemptNumber}</div></div><div className="workspace-actions"><button className="btn btn-quiet" onClick={refreshAll} disabled={migration.isFetching} data-testid="button-refresh-workspace"><RefreshCw className={migration.isFetching ? 'animate-spin' : ''} /> Refresh</button>{(m.status === 'running' || m.status === 'queued') ? <button className="btn btn-danger" onClick={cancelRun} disabled={cancel.isPending} data-testid="button-cancel-migration">{cancel.isPending ? <Loader2 className="animate-spin" /> : <XCircle />} Cancel run</button> : null}</div></div><StageTrack current={m.currentStage} status={m.status} activeIndex={stageIndex} /><WorkspaceNav id={id} active="workspace" /><div className="workspace-grid"><section className="card event-panel"><div className="panel-head"><div><h2>Agent event log</h2><p>Live backend events · refreshes every 4.5 seconds</p></div><span className="top-status"><span className={`pulse ${m.status === 'failed' ? 'danger-pulse' : ''}`} /> {m.status === 'running' ? 'streaming' : 'synced'}</span></div>{eventRows.length === 0 ? <div className="empty" data-testid="state-empty-events"><div className="empty-icon"><Terminal /></div><h3>Waiting for events</h3><p>The backend has not emitted an event for this run yet.</p></div> : <EventLog rows={eventRows} />}</section><div className="summary-stack">{m.agentState ? <SummaryCard title="Agent activity" icon={<Terminal />}><AgentActivity agent={m.agentState} /></SummaryCard> : null}<SummaryCard title="Impact" icon={<Code2 />}><div className="summary-stats"><div className="summary-stat"><span>Affected files</span><strong>{m.affectedFiles}</strong></div><div className="summary-stat"><span>Usages</span><strong>{m.affectedUsages}</strong></div>{m.riskSummary ? <div className="summary-stat"><span>High risk</span><strong style={{ color: 'hsl(var(--destructive))' }}>{m.riskSummary.high}</strong></div> : null}{m.riskSummary ? <div className="summary-stat"><span>Medium risk</span><strong style={{ color: 'hsl(var(--primary))' }}>{m.riskSummary.medium}</strong></div> : null}</div></SummaryCard><SummaryCard title="Verification" icon={<ShieldCheck />}><Checks migration={m} /></SummaryCard><SummaryCard title="Artifacts" icon={<ScrollText />}><p className="helper">Inspect the actual patch and final report as soon as the agent makes them available.</p><div className="link-row"><Link href={`/migration/${id}/diff`} className="btn btn-secondary" data-testid="link-view-diff"><FileCode2 /> Diff</Link><Link href={`/migration/${id}/report`} className="btn btn-secondary" data-testid="link-view-report"><ScrollText /> Report</Link></div></SummaryCard></div></div><div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 18 }}><ResearchSection research={m.research ?? null} /><ImpactMap risk={m.riskSummary ?? null} /><AttemptsTimeline attempts={m.attempts ?? []} cancelled={m.cancelled} /><VerificationPanel commands={m.verificationCommands ?? []} />{m.baseline ? <section className="card report-card"><h2>Baseline mode result</h2><div className="checks">{[['Tests', m.baseline.tests], ['Build', m.baseline.build], ['Typecheck', m.baseline.typecheck], ['Lint', m.baseline.lint]].map(([label, value]) => <div className="check" key={label as string}><span>{label}</span><strong className={value as string}>{statusLabel(value as string)}</strong></div>)}</div><p className="helper" style={{ marginTop: 10 }}>Baseline result: <strong>{m.baseline.result}</strong> · {m.baseline.filesChanged} files changed.</p></section> : null}</div></div>;
 }
 
 function LoadingWorkspace() {
@@ -220,6 +255,132 @@ function Checks({ migration }: { migration: Migration }) {
   return <div className="checks">{[['Tests', migration.tests], ['Build', migration.build], ['Typecheck', migration.typecheck], ['Lint', migration.lint]].map(([label, value]) => <div className="check" key={label as string}><span>{label}</span><strong className={value as string}>{statusLabel(value as string)}</strong></div>)}</div>;
 }
 
+function ConfChip({ confidence }: { confidence?: string }) {
+  const tone = confidence === 'high' ? 'high' : confidence === 'medium' ? 'medium' : 'low';
+  return <span className={`conf-chip ${tone}`}>{confidence ?? 'none'}</span>;
+}
+
+function ResearchGroup({ label, items, tone }: { label: string; items: string[]; tone?: 'break' }) {
+  if (!items || items.length === 0) return null;
+  return <div className="research-group"><h4>{label}</h4><div className="research-tags">{items.map((item, i) => <span className={`research-tag ${tone ?? ''}`} key={`${label}-${i}`}>{item}</span>)}</div></div>;
+}
+
+function ResearchSection({ research }: { research: MigrationResearch | null }) {
+  if (!research) return null;
+  const sources = research.sources ?? [];
+  return <section className="card report-card research-panel" data-testid="section-research">
+    <div className="panel-head" style={{ marginBottom: 6 }}><div><h2>Migration research</h2><p>Real documentation retrieved for {research.dependency} {research.currentVersion} → {research.targetVersion}</p></div></div>
+    <div className="research-conf">Confidence <ConfChip confidence={research.confidence} /></div>
+    {research.confidence === 'none' ? <p className="helper">Reliable migration information could not be established from the retrieved sources.</p> : null}
+    <div className="research-groups">
+      <ResearchGroup label="Breaking changes" items={research.breakingChanges} tone="break" />
+      <ResearchGroup label="Removed APIs" items={research.removedApis} tone="break" />
+      <ResearchGroup label="Renamed APIs" items={research.renamedApis} tone="break" />
+      <ResearchGroup label="Changed APIs" items={research.changedApis} />
+      <ResearchGroup label="Configuration changes" items={research.configurationChanges} />
+      <ResearchGroup label="Import changes" items={research.importChanges} />
+      <ResearchGroup label="Compatibility" items={research.compatibilityRequirements} />
+      <ResearchGroup label="Upgrade notes" items={research.upgradeNotes} />
+    </div>
+    {sources.length > 0 ? <div className="research-groups" data-testid="research-sources"><div className="research-group"><h4>Sources ({sources.length})</h4>
+      {sources.map((source) => (
+        <div className="source-card" key={source.id ?? source.url} data-testid={`source-${source.status}`}>
+          <div className="source-title">
+            <span className={`source-status ${source.status}`}>{source.status}</span>
+            {source.url && source.status === 'retrieved' ? <a href={source.url} target="_blank" rel="noreferrer">{source.title}</a> : <strong style={{ fontSize: 12 }}>{source.title}</strong>}
+          </div>
+          <div className="source-meta">{source.source_type} · retrieved {formatDate(source.retrieved_at)}</div>
+          {source.status === 'unavailable' ? <p className="source-reason">{source.reason || 'Source unavailable'}</p> : null}
+          {source.key_findings && source.key_findings.length > 0 ? <ul className="source-findings">{source.key_findings.map((f, i) => <li key={i}>{f}</li>)}</ul> : null}
+        </div>
+      ))}
+    </div></div> : null}
+  </section>;
+}
+
+function ImpactRow({ finding }: { finding: ImpactFinding }) {
+  const [open, setOpen] = useState(false);
+  return <div className="impact-row">
+    <div className="impact-line">L{finding.line}</div>
+    <div className="impact-main">
+      <span className="impact-api">{finding.symbol}</span> <span className="impact-type">{finding.usageType}</span>
+      <div className="impact-reason">{finding.reason || finding.matchedCode}</div>
+      {open ? <pre className="impact-code">{finding.matchedCode}</pre> : null}
+    </div>
+    <button className="btn btn-quiet" style={{ padding: '2px 8px' }} onClick={() => setOpen((o) => !o)} aria-label="Toggle code snippet">{open ? 'Hide' : 'Code'}</button>
+  </div>;
+}
+
+function ImpactMap({ risk }: { risk: RiskSummary | null }) {
+  if (!risk) return null;
+  const findings = risk.findings ?? [];
+  const byFile = new Map<string, ImpactFinding[]>();
+  for (const f of findings) {
+    if (!byFile.has(f.filePath)) byFile.set(f.filePath, []);
+    byFile.get(f.filePath)!.push(f);
+  }
+  return <section className="card report-card" data-testid="section-impact-map">
+    <div className="panel-head"><div><h2>Impact map</h2><p>How the repository uses this dependency</p></div></div>
+    <div className="summary-stats">
+      <div className="summary-stat"><span>Affected files</span><strong>{risk.affectedFiles}</strong></div>
+      <div className="summary-stat"><span>Usages</span><strong>{risk.affectedUsages}</strong></div>
+      <div className="summary-stat"><span>High</span><strong style={{ color: 'hsl(var(--destructive))' }}>{risk.high}</strong></div>
+      <div className="summary-stat"><span>Medium</span><strong style={{ color: 'hsl(var(--primary))' }}>{risk.medium}</strong></div>
+    </div>
+    <div className="risk-legend"><span><i className="risk-swatch high" />High</span><span><i className="risk-swatch medium" />Medium</span><span><i className="risk-swatch low" />Low</span><span><i className="risk-swatch informational" />Info</span></div>
+    {findings.length === 0 ? <p className="helper" style={{ marginTop: 14 }}>No source usages of this dependency were detected.</p> : <div className="impact-map">
+      {[...byFile.entries()].map(([file, rows]) => (
+        <details className="impact-file" key={file}>
+          <summary className="impact-file-head"><span className="path">{file}</span><span className="count">{rows.length} usage{rows.length > 1 ? 's' : ''}</span></summary>
+          <div className="impact-findings">{rows.map((row, i) => <div key={`${file}-${i}`}><ImpactRow finding={row} /></div>)}</div>
+        </details>
+      ))}
+    </div>}
+    {risk.affectedApis && risk.affectedApis.length > 0 ? <div className="research-groups"><ResearchGroup label="Affected APIs" items={risk.affectedApis} /></div> : null}
+  </section>;
+}
+
+function AttemptsTimeline({ attempts, cancelled }: { attempts: Attempt[]; cancelled?: boolean }) {
+  if (!attempts || attempts.length === 0) return null;
+  return <section className="card report-card" data-testid="section-attempts">
+    <div className="panel-head"><div><h2>Attempts</h2><p>{cancelled ? 'Run cancelled by user' : 'Self-healing verification attempts'}</p></div></div>
+    <div className="attempts-list">
+      {attempts.map((attempt) => (
+        <div className="attempt" key={attempt.number} data-testid={`attempt-${attempt.number}`}>
+          <span className="attempt-num">{attempt.number}</span>
+          <span>
+            <strong className={attempt.result === 'PASS' ? 'add-text' : 'del-text'}>{attempt.result}</strong>
+            {attempt.diagnosis ? <small style={{ display: 'block', color: 'hsl(var(--muted-foreground))', marginTop: 3 }}>{attempt.diagnosis}</small> : null}
+            {attempt.patch ? <details style={{ marginTop: 6 }}><summary style={{ fontFamily: 'var(--app-font-mono)', fontSize: 10 }}>Corrective patch</summary><pre className="impact-code">{attempt.patch}</pre></details> : null}
+          </span>
+          <span className="file-meta">{attempt.filesChanged} files</span>
+        </div>
+      ))}
+    </div>
+  </section>;
+}
+
+function VerificationPanel({ commands }: { commands: Array<{ command: string; status: string; exitCode: number | null; stdout: string; stderr: string; durationMs: number }> }) {
+  if (!commands || commands.length === 0) return null;
+  return <section className="card report-card" data-testid="section-verification">
+    <div className="panel-head"><div><h2>Verification commands</h2><p>Real command output from the workspace</p></div></div>
+    <div className="checks">
+      {commands.map((cmd, i) => (
+        <details key={i} className="verify-command" data-testid={`verify-${cmd.command}`}>
+          <summary>
+            <span className={`verify-status ${cmd.status.toLowerCase()}`}>{cmd.status}</span>
+            <code className="verify-cmd">{cmd.command}</code>
+            {cmd.exitCode != null ? <span className="verify-exit">exit {cmd.exitCode}</span> : null}
+            <span className="verify-time">{cmd.durationMs}ms</span>
+          </summary>
+          {cmd.stdout ? <pre className="verify-output">{cmd.stdout.slice(0, 2000)}</pre> : null}
+          {cmd.stderr ? <pre className="verify-output err">{cmd.stderr.slice(0, 2000)}</pre> : null}
+        </details>
+      ))}
+    </div>
+  </section>;
+}
+
 function MigrationFrame({ children, active }: { children: React.ReactNode; active: 'workspace' | 'diff' | 'report' }) {
   const { id = '' } = useParams<{ id: string }>();
   const migration = useGetMigration(id, { query: { enabled: !!id, queryKey: getGetMigrationQueryKey(id), refetchInterval: 5000 } });
@@ -244,13 +405,18 @@ function ReportPage() {
   const { id = '' } = useParams<{ id: string }>();
   const report = useGetMigrationReport(id, { query: { enabled: !!id, queryKey: getGetMigrationReportQueryKey(id) } });
   const approve = useApproveMigration();
+  const reject = useRejectMigration();
   const qc = useQueryClient();
-  const approveRun = () => approve.mutate({ id }, { onSuccess: (result) => { qc.setQueryData(getGetMigrationQueryKey(id), result); qc.invalidateQueries({ queryKey: getGetMigrationReportQueryKey(id) }); } });
-  return <MigrationFrame active="report">{report.isLoading ? <div className="report-grid"><div className="card skeleton" style={{ height: 420 }} /><div className="card skeleton" style={{ height: 260 }} /></div> : report.isError || !report.data ? <ErrorState message="The final report is not available yet. Complete verification before reviewing it." retry={() => void report.refetch()} /> : <ReportContent report={report.data} approve={approveRun} approving={approve.isPending} />}</MigrationFrame>;
+  const localRefresh = (result: Migration) => { qc.setQueryData(getGetMigrationQueryKey(id), result); qc.invalidateQueries({ queryKey: getGetMigrationReportQueryKey(id) }); };
+  const approveRun = () => approve.mutate({ id }, { onSuccess: localRefresh });
+  const rejectRun = () => reject.mutate({ id }, { onSuccess: localRefresh });
+  return <MigrationFrame active="report">{report.isLoading ? <div className="report-grid"><div className="card skeleton" style={{ height: 420 }} /><div className="card skeleton" style={{ height: 260 }} /></div> : report.isError || !report.data ? <ErrorState message="The final report is not available yet. Complete verification before reviewing it." retry={() => void report.refetch()} /> : <ReportContent report={report.data} approve={approveRun} reject={rejectRun} approving={approve.isPending} rejecting={reject.isPending} />}</MigrationFrame>;
 }
 
-function ReportContent({ report, approve, approving }: { report: MigrationReport; approve: () => void; approving: boolean }) {
-  return <div className="report-grid"><div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}><section className="card report-card"><div className="eyebrow">Agent conclusion</div><h2 style={{ marginTop: 7 }}>{report.status}</h2><p className="report-summary">{report.summary}</p></section><section className="card report-card"><h2>Changes made</h2>{report.changes.length === 0 ? <p className="helper">No change notes were returned.</p> : <ul className="report-list">{report.changes.map((change, index) => <li key={`${change}-${index}`} data-testid={`change-${index}`}>{change}</li>)}</ul>}</section><section className="card report-card"><h2>Research sources</h2>{report.sources.length === 0 ? <p className="helper">No external sources were recorded for this run.</p> : report.sources.map((source, index) => <div className="source" key={`${source.url}-${index}`}><a href={source.url} target="_blank" rel="noreferrer" data-testid={`link-source-${index}`}>{source.title}</a><p>{source.finding}</p></div>)}</section></div><div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}><section className="card report-card"><h2>Impact summary</h2><div className="summary-stats"><div className="summary-stat"><span>Files touched</span><strong>{report.impact.affectedFiles}</strong></div><div className="summary-stat"><span>Usages</span><strong>{report.impact.affectedUsages}</strong></div></div>{report.impact.files.length > 0 ? <ul className="report-list">{report.impact.files.map((file) => <li key={file}>{file}</li>)}</ul> : null}</section><section className="card report-card"><h2>Attempts</h2>{report.attempts.length === 0 ? <p className="helper">No attempt history was returned.</p> : report.attempts.map((attempt) => <div className="attempt" key={attempt.number}><span className="attempt-num">{attempt.number}</span><span>{attempt.result}{attempt.diagnosis ? <small style={{ display: 'block', color: 'hsl(var(--muted-foreground))', marginTop: 3 }}>{attempt.diagnosis}</small> : null}</span><span className="file-meta">{attempt.filesChanged} files</span></div>)}</section><section className="approval"><h3>Approval gate</h3><p>Review the diff and verification checks before accepting this migration into your repository workflow.</p><div className="approval-actions"><button className="btn btn-primary" onClick={approve} disabled={approving || report.status === 'approved'} data-testid="button-approve-migration">{approving ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} {report.status === 'approved' ? 'Approved' : 'Approve migration'}</button></div></section>{report.remainingIssues.length > 0 ? <section className="card report-card"><h2>Remaining issues</h2><ul className="report-list">{report.remainingIssues.map((issue, index) => <li key={`${issue}-${index}`}>{issue}</li>)}</ul></section> : null}</div></div>;
+function ReportContent({ report, approve, reject, approving, rejecting }: { report: MigrationReport; approve: () => void; reject: () => void; approving: boolean; rejecting: boolean }) {
+  const status = report.approvalStatus ?? report.status;
+  const isDone = status === 'APPROVED' || status === 'REJECTED';
+  return <div className="report-grid"><div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}><section className="card report-card"><div className="eyebrow">Agent conclusion</div><h2 style={{ marginTop: 7 }}>{report.status}</h2><p className="report-summary">{report.summary}</p></section><section className="card report-card"><h2>Changes made</h2>{report.changes.length === 0 ? <p className="helper">No change notes were returned.</p> : <ul className="report-list">{report.changes.map((change, index) => <li key={`${change}-${index}`} data-testid={`change-${index}`}>{change}</li>)}</ul>}</section><section className="card report-card"><h2>Research sources</h2>{report.sources.length === 0 ? <p className="helper">No external sources were recorded for this run.</p> : report.sources.map((source, index) => <div className="source" key={`${source.url}-${index}`}><a href={source.url} target="_blank" rel="noreferrer" data-testid={`link-source-${index}`}>{source.title}</a><p>{source.finding}</p></div>)}</section><ResearchSection research={report.research ?? null} /><ImpactMap risk={report.riskSummary ?? null} /></div><div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}><section className="card report-card"><h2>Impact summary</h2><div className="summary-stats"><div className="summary-stat"><span>Files touched</span><strong>{report.impact.affectedFiles}</strong></div><div className="summary-stat"><span>Usages</span><strong>{report.impact.affectedUsages}</strong></div></div>{report.impact.files.length > 0 ? <ul className="report-list">{report.impact.files.map((file) => <li key={file}>{file}</li>)}</ul> : null}</section><AttemptsTimeline attempts={report.attempts ?? []} /><VerificationPanel commands={report.verificationCommands ?? []} />{report.baseline ? <section className="card report-card"><h2>Baseline result</h2><div className="checks">{[['Tests', report.baseline.tests], ['Build', report.baseline.build], ['Typecheck', report.baseline.typecheck], ['Lint', report.baseline.lint]].map(([label, value]) => <div className="check" key={label as string}><span>{label}</span><strong className={value as string}>{statusLabel(value as string)}</strong></div>)}</div><p className="helper" style={{ marginTop: 8 }}>Result: <strong>{report.baseline.result}</strong> · {report.baseline.filesChanged} files changed.</p></section> : null}<section className="approval"><h3>Approval gate · {status}</h3><p>Review the diff and verification checks before accepting this migration into your repository workflow.</p><div className="approval-actions"><button className="btn btn-primary" onClick={approve} disabled={approving || isDone} data-testid="button-approve-migration">{approving ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} {status === 'APPROVED' ? 'Approved' : 'Approve migration'}</button><button className="btn btn-danger" onClick={reject} disabled={rejecting || isDone} data-testid="button-reject-migration">{rejecting ? <Loader2 className="animate-spin" /> : <XCircle />} {status === 'REJECTED' ? 'Rejected' : 'Reject'}</button></div></section>{report.remainingIssues.length > 0 ? <section className="card report-card"><h2>Remaining issues</h2><ul className="report-list">{report.remainingIssues.map((issue, index) => <li key={`${issue}-${index}`}>{issue}</li>)}</ul></section> : null}</div></div>;
 }
 
 function AppRouter() {
