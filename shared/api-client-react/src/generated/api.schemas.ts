@@ -249,6 +249,8 @@ export interface MigrationResearch {
   upgradeNotes?: string[];
   findings?: MigrationFinding[];
   confidence: MigrationResearchConfidence;
+  /** @nullable */
+  explicitLowConfidenceReason?: string | null;
 }
 
 export interface ImpactFinding {
@@ -275,9 +277,23 @@ export interface RiskSummary {
   findings?: ImpactFinding[];
 }
 
+/**
+ * @nullable
+ */
+export type AttemptPatchResult = typeof AttemptPatchResult[keyof typeof AttemptPatchResult] | null;
+
+
+export const AttemptPatchResult = {
+  applied: 'applied',
+  failed: 'failed',
+  skipped: 'skipped',
+} as const;
+
 export interface Attempt {
   number: number;
   result: string;
+  /** @nullable */
+  failureType?: string | null;
   /** @nullable */
   diagnosis: string | null;
   filesChanged: number;
@@ -293,6 +309,8 @@ export interface Attempt {
   filesModified?: string[];
   /** @nullable */
   patch?: string | null;
+  /** @nullable */
+  patchResult?: AttemptPatchResult;
 }
 
 export type VerificationCommandStatus = typeof VerificationCommandStatus[keyof typeof VerificationCommandStatus];
@@ -322,6 +340,74 @@ export interface BaselineResult {
   typecheck: string;
   lint: string;
   filesChanged: number;
+}
+
+export type MigrationPlanResearchConfidence = typeof MigrationPlanResearchConfidence[keyof typeof MigrationPlanResearchConfidence];
+
+
+export const MigrationPlanResearchConfidence = {
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+  none: 'none',
+} as const;
+
+export interface MigrationPlan {
+  summary: string;
+  breakingChanges: string[];
+  plannedChanges: string[];
+  validationCommands: string[];
+  migrationFindings?: string[];
+  affectedApis?: string[];
+  riskAssessment?: string[];
+  plannedPackageChanges?: string[];
+  plannedSourceChanges?: string[];
+  plannedConfigChanges?: string[];
+  potentialFailurePoints?: string[];
+  researchConfidence?: MigrationPlanResearchConfidence;
+}
+
+export type AiStageStage = typeof AiStageStage[keyof typeof AiStageStage];
+
+
+export const AiStageStage = {
+  research_synthesis: 'research_synthesis',
+  coding_agent: 'coding_agent',
+  failure_diagnosis: 'failure_diagnosis',
+  repair: 'repair',
+} as const;
+
+export type AiStageProvider = typeof AiStageProvider[keyof typeof AiStageProvider];
+
+
+export const AiStageProvider = {
+  grok: 'grok',
+  scripted: 'scripted',
+  none: 'none',
+} as const;
+
+export type AiStageRequestStatus = typeof AiStageRequestStatus[keyof typeof AiStageRequestStatus];
+
+
+export const AiStageRequestStatus = {
+  success: 'success',
+  error: 'error',
+  skipped: 'skipped',
+} as const;
+
+export interface AiStage {
+  stage: AiStageStage;
+  provider: AiStageProvider;
+  model: string;
+  requestStatus: AiStageRequestStatus;
+  success: boolean;
+  timestamp: string;
+  /** @nullable */
+  durationMs?: number | null;
+  /** @nullable */
+  attempt?: number | null;
+  /** @nullable */
+  error?: string | null;
 }
 
 export interface Migration {
@@ -358,6 +444,9 @@ export interface Migration {
   verificationCommands?: VerificationCommand[];
   /** @nullable */
   baseline?: BaselineResult | null;
+  /** @nullable */
+  plan?: MigrationPlan | null;
+  aiStages?: AiStage[];
   cancelled?: boolean;
 }
 
@@ -432,31 +521,6 @@ export interface ResearchSource {
   finding: string;
 }
 
-export type MigrationPlanResearchConfidence = typeof MigrationPlanResearchConfidence[keyof typeof MigrationPlanResearchConfidence];
-
-
-export const MigrationPlanResearchConfidence = {
-  high: 'high',
-  medium: 'medium',
-  low: 'low',
-  none: 'none',
-} as const;
-
-export interface MigrationPlan {
-  summary: string;
-  breakingChanges: string[];
-  plannedChanges: string[];
-  validationCommands: string[];
-  migrationFindings?: string[];
-  affectedApis?: string[];
-  riskAssessment?: string[];
-  plannedPackageChanges?: string[];
-  plannedSourceChanges?: string[];
-  plannedConfigChanges?: string[];
-  potentialFailurePoints?: string[];
-  researchConfidence?: MigrationPlanResearchConfidence;
-}
-
 export interface MigrationReport {
   migrationId: string;
   status: string;
@@ -477,6 +541,7 @@ export interface MigrationReport {
   verificationCommands?: VerificationCommand[];
   /** @nullable */
   baseline?: BaselineResult | null;
+  aiStages?: AiStage[];
   approvalStatus?: MigrationReportApprovalStatus;
 }
 

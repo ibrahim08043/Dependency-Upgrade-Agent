@@ -109,7 +109,8 @@ export const GetDashboardResponse = zod.object({
   "evidence": zod.string(),
   "confident": zod.boolean()
 })).optional(),
-  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+  "confidence": zod.enum(['high', 'medium', 'low', 'none']),
+  "explicitLowConfidenceReason": zod.string().nullish()
 }).nullish(),
   "riskSummary": zod.object({
   "affectedFiles": zod.number(),
@@ -135,6 +136,7 @@ export const GetDashboardResponse = zod.object({
   "attempts": zod.array(zod.object({
   "number": zod.number(),
   "result": zod.string(),
+  "failureType": zod.string().nullish(),
   "diagnosis": zod.string().nullable(),
   "filesChanged": zod.number(),
   "command": zod.string().nullish(),
@@ -143,7 +145,8 @@ export const GetDashboardResponse = zod.object({
   "stderr": zod.string().nullish(),
   "filesInspected": zod.array(zod.string()).optional(),
   "filesModified": zod.array(zod.string()).optional(),
-  "patch": zod.string().nullish()
+  "patch": zod.string().nullish(),
+  "patchResult": zod.union([zod.literal('applied'),zod.literal('failed'),zod.literal('skipped'),zod.literal(null)]).nullish()
 })).optional(),
   "verificationCommands": zod.array(zod.object({
   "command": zod.string(),
@@ -161,6 +164,31 @@ export const GetDashboardResponse = zod.object({
   "lint": zod.string(),
   "filesChanged": zod.number()
 }).nullish(),
+  "plan": zod.object({
+  "summary": zod.string(),
+  "breakingChanges": zod.array(zod.string()),
+  "plannedChanges": zod.array(zod.string()),
+  "validationCommands": zod.array(zod.string()),
+  "migrationFindings": zod.array(zod.string()).optional(),
+  "affectedApis": zod.array(zod.string()).optional(),
+  "riskAssessment": zod.array(zod.string()).optional(),
+  "plannedPackageChanges": zod.array(zod.string()).optional(),
+  "plannedSourceChanges": zod.array(zod.string()).optional(),
+  "plannedConfigChanges": zod.array(zod.string()).optional(),
+  "potentialFailurePoints": zod.array(zod.string()).optional(),
+  "researchConfidence": zod.enum(['high', 'medium', 'low', 'none']).optional()
+}).nullish(),
+  "aiStages": zod.array(zod.object({
+  "stage": zod.enum(['research_synthesis', 'coding_agent', 'failure_diagnosis', 'repair']),
+  "provider": zod.enum(['grok', 'scripted', 'none']),
+  "model": zod.string(),
+  "requestStatus": zod.enum(['success', 'error', 'skipped']),
+  "success": zod.boolean(),
+  "timestamp": zod.coerce.date(),
+  "durationMs": zod.number().nullish(),
+  "attempt": zod.number().nullish(),
+  "error": zod.string().nullish()
+})).optional(),
   "cancelled": zod.boolean().optional()
 })),
   "capabilities": zod.array(zod.string())
@@ -326,7 +354,8 @@ export const ListMigrationsResponseItem = zod.object({
   "evidence": zod.string(),
   "confident": zod.boolean()
 })).optional(),
-  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+  "confidence": zod.enum(['high', 'medium', 'low', 'none']),
+  "explicitLowConfidenceReason": zod.string().nullish()
 }).nullish(),
   "riskSummary": zod.object({
   "affectedFiles": zod.number(),
@@ -352,6 +381,7 @@ export const ListMigrationsResponseItem = zod.object({
   "attempts": zod.array(zod.object({
   "number": zod.number(),
   "result": zod.string(),
+  "failureType": zod.string().nullish(),
   "diagnosis": zod.string().nullable(),
   "filesChanged": zod.number(),
   "command": zod.string().nullish(),
@@ -360,7 +390,8 @@ export const ListMigrationsResponseItem = zod.object({
   "stderr": zod.string().nullish(),
   "filesInspected": zod.array(zod.string()).optional(),
   "filesModified": zod.array(zod.string()).optional(),
-  "patch": zod.string().nullish()
+  "patch": zod.string().nullish(),
+  "patchResult": zod.union([zod.literal('applied'),zod.literal('failed'),zod.literal('skipped'),zod.literal(null)]).nullish()
 })).optional(),
   "verificationCommands": zod.array(zod.object({
   "command": zod.string(),
@@ -378,6 +409,31 @@ export const ListMigrationsResponseItem = zod.object({
   "lint": zod.string(),
   "filesChanged": zod.number()
 }).nullish(),
+  "plan": zod.object({
+  "summary": zod.string(),
+  "breakingChanges": zod.array(zod.string()),
+  "plannedChanges": zod.array(zod.string()),
+  "validationCommands": zod.array(zod.string()),
+  "migrationFindings": zod.array(zod.string()).optional(),
+  "affectedApis": zod.array(zod.string()).optional(),
+  "riskAssessment": zod.array(zod.string()).optional(),
+  "plannedPackageChanges": zod.array(zod.string()).optional(),
+  "plannedSourceChanges": zod.array(zod.string()).optional(),
+  "plannedConfigChanges": zod.array(zod.string()).optional(),
+  "potentialFailurePoints": zod.array(zod.string()).optional(),
+  "researchConfidence": zod.enum(['high', 'medium', 'low', 'none']).optional()
+}).nullish(),
+  "aiStages": zod.array(zod.object({
+  "stage": zod.enum(['research_synthesis', 'coding_agent', 'failure_diagnosis', 'repair']),
+  "provider": zod.enum(['grok', 'scripted', 'none']),
+  "model": zod.string(),
+  "requestStatus": zod.enum(['success', 'error', 'skipped']),
+  "success": zod.boolean(),
+  "timestamp": zod.coerce.date(),
+  "durationMs": zod.number().nullish(),
+  "attempt": zod.number().nullish(),
+  "error": zod.string().nullish()
+})).optional(),
   "cancelled": zod.boolean().optional()
 })
 export const ListMigrationsResponse = zod.array(ListMigrationsResponseItem)
@@ -472,7 +528,8 @@ export const CreateMigrationResponse = zod.object({
   "evidence": zod.string(),
   "confident": zod.boolean()
 })).optional(),
-  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+  "confidence": zod.enum(['high', 'medium', 'low', 'none']),
+  "explicitLowConfidenceReason": zod.string().nullish()
 }).nullish(),
   "riskSummary": zod.object({
   "affectedFiles": zod.number(),
@@ -498,6 +555,7 @@ export const CreateMigrationResponse = zod.object({
   "attempts": zod.array(zod.object({
   "number": zod.number(),
   "result": zod.string(),
+  "failureType": zod.string().nullish(),
   "diagnosis": zod.string().nullable(),
   "filesChanged": zod.number(),
   "command": zod.string().nullish(),
@@ -506,7 +564,8 @@ export const CreateMigrationResponse = zod.object({
   "stderr": zod.string().nullish(),
   "filesInspected": zod.array(zod.string()).optional(),
   "filesModified": zod.array(zod.string()).optional(),
-  "patch": zod.string().nullish()
+  "patch": zod.string().nullish(),
+  "patchResult": zod.union([zod.literal('applied'),zod.literal('failed'),zod.literal('skipped'),zod.literal(null)]).nullish()
 })).optional(),
   "verificationCommands": zod.array(zod.object({
   "command": zod.string(),
@@ -524,6 +583,31 @@ export const CreateMigrationResponse = zod.object({
   "lint": zod.string(),
   "filesChanged": zod.number()
 }).nullish(),
+  "plan": zod.object({
+  "summary": zod.string(),
+  "breakingChanges": zod.array(zod.string()),
+  "plannedChanges": zod.array(zod.string()),
+  "validationCommands": zod.array(zod.string()),
+  "migrationFindings": zod.array(zod.string()).optional(),
+  "affectedApis": zod.array(zod.string()).optional(),
+  "riskAssessment": zod.array(zod.string()).optional(),
+  "plannedPackageChanges": zod.array(zod.string()).optional(),
+  "plannedSourceChanges": zod.array(zod.string()).optional(),
+  "plannedConfigChanges": zod.array(zod.string()).optional(),
+  "potentialFailurePoints": zod.array(zod.string()).optional(),
+  "researchConfidence": zod.enum(['high', 'medium', 'low', 'none']).optional()
+}).nullish(),
+  "aiStages": zod.array(zod.object({
+  "stage": zod.enum(['research_synthesis', 'coding_agent', 'failure_diagnosis', 'repair']),
+  "provider": zod.enum(['grok', 'scripted', 'none']),
+  "model": zod.string(),
+  "requestStatus": zod.enum(['success', 'error', 'skipped']),
+  "success": zod.boolean(),
+  "timestamp": zod.coerce.date(),
+  "durationMs": zod.number().nullish(),
+  "attempt": zod.number().nullish(),
+  "error": zod.string().nullish()
+})).optional(),
   "cancelled": zod.boolean().optional()
 })
 
@@ -610,7 +694,8 @@ export const GetMigrationResponse = zod.object({
   "evidence": zod.string(),
   "confident": zod.boolean()
 })).optional(),
-  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+  "confidence": zod.enum(['high', 'medium', 'low', 'none']),
+  "explicitLowConfidenceReason": zod.string().nullish()
 }).nullish(),
   "riskSummary": zod.object({
   "affectedFiles": zod.number(),
@@ -636,6 +721,7 @@ export const GetMigrationResponse = zod.object({
   "attempts": zod.array(zod.object({
   "number": zod.number(),
   "result": zod.string(),
+  "failureType": zod.string().nullish(),
   "diagnosis": zod.string().nullable(),
   "filesChanged": zod.number(),
   "command": zod.string().nullish(),
@@ -644,7 +730,8 @@ export const GetMigrationResponse = zod.object({
   "stderr": zod.string().nullish(),
   "filesInspected": zod.array(zod.string()).optional(),
   "filesModified": zod.array(zod.string()).optional(),
-  "patch": zod.string().nullish()
+  "patch": zod.string().nullish(),
+  "patchResult": zod.union([zod.literal('applied'),zod.literal('failed'),zod.literal('skipped'),zod.literal(null)]).nullish()
 })).optional(),
   "verificationCommands": zod.array(zod.object({
   "command": zod.string(),
@@ -662,6 +749,31 @@ export const GetMigrationResponse = zod.object({
   "lint": zod.string(),
   "filesChanged": zod.number()
 }).nullish(),
+  "plan": zod.object({
+  "summary": zod.string(),
+  "breakingChanges": zod.array(zod.string()),
+  "plannedChanges": zod.array(zod.string()),
+  "validationCommands": zod.array(zod.string()),
+  "migrationFindings": zod.array(zod.string()).optional(),
+  "affectedApis": zod.array(zod.string()).optional(),
+  "riskAssessment": zod.array(zod.string()).optional(),
+  "plannedPackageChanges": zod.array(zod.string()).optional(),
+  "plannedSourceChanges": zod.array(zod.string()).optional(),
+  "plannedConfigChanges": zod.array(zod.string()).optional(),
+  "potentialFailurePoints": zod.array(zod.string()).optional(),
+  "researchConfidence": zod.enum(['high', 'medium', 'low', 'none']).optional()
+}).nullish(),
+  "aiStages": zod.array(zod.object({
+  "stage": zod.enum(['research_synthesis', 'coding_agent', 'failure_diagnosis', 'repair']),
+  "provider": zod.enum(['grok', 'scripted', 'none']),
+  "model": zod.string(),
+  "requestStatus": zod.enum(['success', 'error', 'skipped']),
+  "success": zod.boolean(),
+  "timestamp": zod.coerce.date(),
+  "durationMs": zod.number().nullish(),
+  "attempt": zod.number().nullish(),
+  "error": zod.string().nullish()
+})).optional(),
   "cancelled": zod.boolean().optional()
 })
 
@@ -735,6 +847,7 @@ export const GetMigrationReportResponse = zod.object({
   "attempts": zod.array(zod.object({
   "number": zod.number(),
   "result": zod.string(),
+  "failureType": zod.string().nullish(),
   "diagnosis": zod.string().nullable(),
   "filesChanged": zod.number(),
   "command": zod.string().nullish(),
@@ -743,7 +856,8 @@ export const GetMigrationReportResponse = zod.object({
   "stderr": zod.string().nullish(),
   "filesInspected": zod.array(zod.string()).optional(),
   "filesModified": zod.array(zod.string()).optional(),
-  "patch": zod.string().nullish()
+  "patch": zod.string().nullish(),
+  "patchResult": zod.union([zod.literal('applied'),zod.literal('failed'),zod.literal('skipped'),zod.literal(null)]).nullish()
 })),
   "remainingIssues": zod.array(zod.string()),
   "research": zod.object({
@@ -778,7 +892,8 @@ export const GetMigrationReportResponse = zod.object({
   "evidence": zod.string(),
   "confident": zod.boolean()
 })).optional(),
-  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+  "confidence": zod.enum(['high', 'medium', 'low', 'none']),
+  "explicitLowConfidenceReason": zod.string().nullish()
 }).nullish(),
   "riskSummary": zod.object({
   "affectedFiles": zod.number(),
@@ -832,6 +947,17 @@ export const GetMigrationReportResponse = zod.object({
   "lint": zod.string(),
   "filesChanged": zod.number()
 }).nullish(),
+  "aiStages": zod.array(zod.object({
+  "stage": zod.enum(['research_synthesis', 'coding_agent', 'failure_diagnosis', 'repair']),
+  "provider": zod.enum(['grok', 'scripted', 'none']),
+  "model": zod.string(),
+  "requestStatus": zod.enum(['success', 'error', 'skipped']),
+  "success": zod.boolean(),
+  "timestamp": zod.coerce.date(),
+  "durationMs": zod.number().nullish(),
+  "attempt": zod.number().nullish(),
+  "error": zod.string().nullish()
+})).optional(),
   "approvalStatus": zod.enum(['APPROVED', 'REJECTED', 'PENDING']).optional()
 })
 
@@ -918,7 +1044,8 @@ export const ApproveMigrationResponse = zod.object({
   "evidence": zod.string(),
   "confident": zod.boolean()
 })).optional(),
-  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+  "confidence": zod.enum(['high', 'medium', 'low', 'none']),
+  "explicitLowConfidenceReason": zod.string().nullish()
 }).nullish(),
   "riskSummary": zod.object({
   "affectedFiles": zod.number(),
@@ -944,6 +1071,7 @@ export const ApproveMigrationResponse = zod.object({
   "attempts": zod.array(zod.object({
   "number": zod.number(),
   "result": zod.string(),
+  "failureType": zod.string().nullish(),
   "diagnosis": zod.string().nullable(),
   "filesChanged": zod.number(),
   "command": zod.string().nullish(),
@@ -952,7 +1080,8 @@ export const ApproveMigrationResponse = zod.object({
   "stderr": zod.string().nullish(),
   "filesInspected": zod.array(zod.string()).optional(),
   "filesModified": zod.array(zod.string()).optional(),
-  "patch": zod.string().nullish()
+  "patch": zod.string().nullish(),
+  "patchResult": zod.union([zod.literal('applied'),zod.literal('failed'),zod.literal('skipped'),zod.literal(null)]).nullish()
 })).optional(),
   "verificationCommands": zod.array(zod.object({
   "command": zod.string(),
@@ -970,6 +1099,31 @@ export const ApproveMigrationResponse = zod.object({
   "lint": zod.string(),
   "filesChanged": zod.number()
 }).nullish(),
+  "plan": zod.object({
+  "summary": zod.string(),
+  "breakingChanges": zod.array(zod.string()),
+  "plannedChanges": zod.array(zod.string()),
+  "validationCommands": zod.array(zod.string()),
+  "migrationFindings": zod.array(zod.string()).optional(),
+  "affectedApis": zod.array(zod.string()).optional(),
+  "riskAssessment": zod.array(zod.string()).optional(),
+  "plannedPackageChanges": zod.array(zod.string()).optional(),
+  "plannedSourceChanges": zod.array(zod.string()).optional(),
+  "plannedConfigChanges": zod.array(zod.string()).optional(),
+  "potentialFailurePoints": zod.array(zod.string()).optional(),
+  "researchConfidence": zod.enum(['high', 'medium', 'low', 'none']).optional()
+}).nullish(),
+  "aiStages": zod.array(zod.object({
+  "stage": zod.enum(['research_synthesis', 'coding_agent', 'failure_diagnosis', 'repair']),
+  "provider": zod.enum(['grok', 'scripted', 'none']),
+  "model": zod.string(),
+  "requestStatus": zod.enum(['success', 'error', 'skipped']),
+  "success": zod.boolean(),
+  "timestamp": zod.coerce.date(),
+  "durationMs": zod.number().nullish(),
+  "attempt": zod.number().nullish(),
+  "error": zod.string().nullish()
+})).optional(),
   "cancelled": zod.boolean().optional()
 })
 
@@ -1056,7 +1210,8 @@ export const RejectMigrationResponse = zod.object({
   "evidence": zod.string(),
   "confident": zod.boolean()
 })).optional(),
-  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+  "confidence": zod.enum(['high', 'medium', 'low', 'none']),
+  "explicitLowConfidenceReason": zod.string().nullish()
 }).nullish(),
   "riskSummary": zod.object({
   "affectedFiles": zod.number(),
@@ -1082,6 +1237,7 @@ export const RejectMigrationResponse = zod.object({
   "attempts": zod.array(zod.object({
   "number": zod.number(),
   "result": zod.string(),
+  "failureType": zod.string().nullish(),
   "diagnosis": zod.string().nullable(),
   "filesChanged": zod.number(),
   "command": zod.string().nullish(),
@@ -1090,7 +1246,8 @@ export const RejectMigrationResponse = zod.object({
   "stderr": zod.string().nullish(),
   "filesInspected": zod.array(zod.string()).optional(),
   "filesModified": zod.array(zod.string()).optional(),
-  "patch": zod.string().nullish()
+  "patch": zod.string().nullish(),
+  "patchResult": zod.union([zod.literal('applied'),zod.literal('failed'),zod.literal('skipped'),zod.literal(null)]).nullish()
 })).optional(),
   "verificationCommands": zod.array(zod.object({
   "command": zod.string(),
@@ -1108,6 +1265,31 @@ export const RejectMigrationResponse = zod.object({
   "lint": zod.string(),
   "filesChanged": zod.number()
 }).nullish(),
+  "plan": zod.object({
+  "summary": zod.string(),
+  "breakingChanges": zod.array(zod.string()),
+  "plannedChanges": zod.array(zod.string()),
+  "validationCommands": zod.array(zod.string()),
+  "migrationFindings": zod.array(zod.string()).optional(),
+  "affectedApis": zod.array(zod.string()).optional(),
+  "riskAssessment": zod.array(zod.string()).optional(),
+  "plannedPackageChanges": zod.array(zod.string()).optional(),
+  "plannedSourceChanges": zod.array(zod.string()).optional(),
+  "plannedConfigChanges": zod.array(zod.string()).optional(),
+  "potentialFailurePoints": zod.array(zod.string()).optional(),
+  "researchConfidence": zod.enum(['high', 'medium', 'low', 'none']).optional()
+}).nullish(),
+  "aiStages": zod.array(zod.object({
+  "stage": zod.enum(['research_synthesis', 'coding_agent', 'failure_diagnosis', 'repair']),
+  "provider": zod.enum(['grok', 'scripted', 'none']),
+  "model": zod.string(),
+  "requestStatus": zod.enum(['success', 'error', 'skipped']),
+  "success": zod.boolean(),
+  "timestamp": zod.coerce.date(),
+  "durationMs": zod.number().nullish(),
+  "attempt": zod.number().nullish(),
+  "error": zod.string().nullish()
+})).optional(),
   "cancelled": zod.boolean().optional()
 })
 
@@ -1194,7 +1376,8 @@ export const CancelMigrationResponse = zod.object({
   "evidence": zod.string(),
   "confident": zod.boolean()
 })).optional(),
-  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+  "confidence": zod.enum(['high', 'medium', 'low', 'none']),
+  "explicitLowConfidenceReason": zod.string().nullish()
 }).nullish(),
   "riskSummary": zod.object({
   "affectedFiles": zod.number(),
@@ -1220,6 +1403,7 @@ export const CancelMigrationResponse = zod.object({
   "attempts": zod.array(zod.object({
   "number": zod.number(),
   "result": zod.string(),
+  "failureType": zod.string().nullish(),
   "diagnosis": zod.string().nullable(),
   "filesChanged": zod.number(),
   "command": zod.string().nullish(),
@@ -1228,7 +1412,8 @@ export const CancelMigrationResponse = zod.object({
   "stderr": zod.string().nullish(),
   "filesInspected": zod.array(zod.string()).optional(),
   "filesModified": zod.array(zod.string()).optional(),
-  "patch": zod.string().nullish()
+  "patch": zod.string().nullish(),
+  "patchResult": zod.union([zod.literal('applied'),zod.literal('failed'),zod.literal('skipped'),zod.literal(null)]).nullish()
 })).optional(),
   "verificationCommands": zod.array(zod.object({
   "command": zod.string(),
@@ -1246,6 +1431,31 @@ export const CancelMigrationResponse = zod.object({
   "lint": zod.string(),
   "filesChanged": zod.number()
 }).nullish(),
+  "plan": zod.object({
+  "summary": zod.string(),
+  "breakingChanges": zod.array(zod.string()),
+  "plannedChanges": zod.array(zod.string()),
+  "validationCommands": zod.array(zod.string()),
+  "migrationFindings": zod.array(zod.string()).optional(),
+  "affectedApis": zod.array(zod.string()).optional(),
+  "riskAssessment": zod.array(zod.string()).optional(),
+  "plannedPackageChanges": zod.array(zod.string()).optional(),
+  "plannedSourceChanges": zod.array(zod.string()).optional(),
+  "plannedConfigChanges": zod.array(zod.string()).optional(),
+  "potentialFailurePoints": zod.array(zod.string()).optional(),
+  "researchConfidence": zod.enum(['high', 'medium', 'low', 'none']).optional()
+}).nullish(),
+  "aiStages": zod.array(zod.object({
+  "stage": zod.enum(['research_synthesis', 'coding_agent', 'failure_diagnosis', 'repair']),
+  "provider": zod.enum(['grok', 'scripted', 'none']),
+  "model": zod.string(),
+  "requestStatus": zod.enum(['success', 'error', 'skipped']),
+  "success": zod.boolean(),
+  "timestamp": zod.coerce.date(),
+  "durationMs": zod.number().nullish(),
+  "attempt": zod.number().nullish(),
+  "error": zod.string().nullish()
+})).optional(),
   "cancelled": zod.boolean().optional()
 })
 

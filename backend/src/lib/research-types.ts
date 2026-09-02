@@ -54,6 +54,8 @@ export interface MigrationResearch {
   upgradeNotes: string[];
   findings: MigrationFinding[];
   confidence: "high" | "medium" | "low" | "none";
+  /** Set only when confidence is LOW/none: why reliable info could not be established. */
+  explicitLowConfidenceReason?: string;
 }
 
 /** Structured synthesis produced by Grok from retrieved research + repo usage. */

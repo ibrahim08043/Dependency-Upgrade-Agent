@@ -78,7 +78,9 @@ export interface MigrationRecord {
   changes: string[];
   attempts: Array<{
     number: number;
-    result: string; // PASS | FAIL | SKIPPED | TIMEOUT
+    result: string; // PASS | FAIL
+    /** Which check failed this attempt (TEST_FAILURE / BUILD_FAILURE / TYPECHECK_FAILURE / VERIFICATION_FAILURE). */
+    failureType?: string;
     diagnosis: string | null;
     filesChanged: number;
     command?: string;
@@ -88,6 +90,8 @@ export interface MigrationRecord {
     filesInspected?: string[];
     filesModified?: string[];
     patch?: string;
+    /** Outcome of the corrective-patch step for this attempt: "applied" | "failed" | "skipped". */
+    patchResult?: string;
   }>;
   /** Rich per-command verification records (command, status, exit code, stdout, stderr, duration). */
   verificationCommands?: Array<{
@@ -147,6 +151,24 @@ export interface MigrationRecord {
   research?: import("./research-types").MigrationResearch;
   /** Phase 2 — per-file risk classification after correlating research with usage. */
   riskSummary?: import("./impact").ImpactSummary;
+  /**
+   * Phase 3 — non-sensitive record of every real AI request made during the run
+   * (synthesis / coding agent / diagnosis / repair). Never stores the API key or
+   * chain-of-thought; only stage, provider, model, status, timestamp, duration.
+   */
+  aiStages?: AiStageRecord[];
+}
+
+export interface AiStageRecord {
+  stage: "research_synthesis" | "coding_agent" | "failure_diagnosis" | "repair";
+  provider: string; // "grok" | "scripted" (test seam)
+  model: string; // resolved model name or "unknown"
+  requestStatus: "success" | "error" | "skipped";
+  success: boolean;
+  timestamp: string;
+  durationMs?: number;
+  attempt?: number;
+  error?: string; // short error code/message, never a secret
 }
 
 export interface MigrationEvent {

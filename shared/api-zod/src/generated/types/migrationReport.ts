@@ -5,6 +5,7 @@
  * Dependency Upgrade Agent API
  * OpenAPI spec version: 0.1.0
  */
+import type { AiStage } from './aiStage';
 import type { Attempt } from './attempt';
 import type { BaselineResult } from './baselineResult';
 import type { ImpactSummary } from './impactSummary';
@@ -36,5 +37,6 @@ export interface MigrationReport {
   verificationCommands?: VerificationCommand[];
   /** @nullable */
   baseline?: BaselineResult | null;
+  aiStages?: AiStage[];
   approvalStatus?: MigrationReportApprovalStatus;
 }

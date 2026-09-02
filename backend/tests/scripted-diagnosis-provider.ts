@@ -12,6 +12,9 @@ export class ScriptedDiagnosisProvider implements GrokProvider {
   isConfigured(): boolean {
     return true;
   }
+
+  /** Scripted test provider — fixed model name for AI-stage metadata. */
+  readonly model = "scripted-test-model";
   async chat(messages: ChatMessage[], _tools?: ToolDefinition[]): Promise<GrokCompletionResponse> {
     this.calls += 1;
     void messages;

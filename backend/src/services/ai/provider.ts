@@ -1,18 +1,20 @@
 import { XaiGrokProvider } from "./grok";
 import type { GrokProvider } from "./types";
-import { GrokConfigError } from "./types";
+import { GrokConfigError, invalidXaiKeyReason } from "./types";
 
 let cachedProvider: GrokProvider | null = null;
 
+export { invalidXaiKeyReason };
+
 /**
  * Returns a configured Grok provider, throwing GrokConfigError when the
- * backend has no XAI_API_KEY.  The instance is lazily cached per process.
+ * backend has no (or an obviously invalid) XAI_API_KEY.  The instance is
+ * lazily cached per process.
  */
 export function getGrokProvider(): GrokProvider {
-  if (!process.env.XAI_API_KEY) {
-    throw new GrokConfigError(
-      "GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable the agent.",
-    );
+  const problem = invalidXaiKeyReason(process.env.XAI_API_KEY ?? "");
+  if (problem) {
+    throw new GrokConfigError(`GROK_NOT_CONFIGURED: ${problem} Add it to the backend environment to enable the agent.`);
   }
   if (!cachedProvider) {
     cachedProvider = new XaiGrokProvider();

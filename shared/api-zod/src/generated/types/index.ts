@@ -7,7 +7,12 @@
  */
 
 export * from './agentToolCall';
+export * from './aiStage';
+export * from './aiStageProvider';
+export * from './aiStageRequestStatus';
+export * from './aiStageStage';
 export * from './attempt';
+export * from './attemptPatchResult';
 export * from './baselineResult';
 export * from './dashboardSummary';
 export * from './dependency';

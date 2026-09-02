@@ -380,6 +380,13 @@ components:
         baseline:
           type: ["object", "null"]
           $ref: "#/components/schemas/BaselineResult"
+        plan:
+          type: ["object", "null"]
+          $ref: "#/components/schemas/MigrationPlan"
+        aiStages:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiStage"
         cancelled:
           type: boolean
       required: [id, repositoryId, repositoryName, dependency, oldVersion, targetVersion, mode, status, currentStage, attemptNumber, affectedFiles, affectedUsages, tests, build, typecheck, lint, errorCode, createdAt, updatedAt]
@@ -464,6 +471,10 @@ components:
         baseline:
           type: ["object", "null"]
           $ref: "#/components/schemas/BaselineResult"
+        aiStages:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiStage"
         approvalStatus:
           type: string
           enum: [APPROVED, REJECTED, PENDING]
@@ -593,6 +604,7 @@ components:
           type: array
           items: { $ref: "#/components/schemas/MigrationFinding" }
         confidence: { type: string, enum: [high, medium, low, none] }
+        explicitLowConfidenceReason: { type: ["string", "null"] }
       required: [dependency, currentVersion, targetVersion, sources, confidence]
     ImpactFinding:
       type: object
@@ -635,6 +647,7 @@ components:
       properties:
         number: { type: number }
         result: { type: string }
+        failureType: { type: ["string", "null"] }
         diagnosis: { type: ["string", "null"] }
         filesChanged: { type: number }
         command: { type: ["string", "null"] }
@@ -648,6 +661,7 @@ components:
           type: array
           items: { type: string }
         patch: { type: ["string", "null"] }
+        patchResult: { type: ["string", "null"], enum: [applied, failed, skipped, null] }
       required: [number, result, diagnosis, filesChanged]
     VerificationCommand:
       type: object
@@ -669,6 +683,19 @@ components:
         lint: { type: string }
         filesChanged: { type: number }
       required: [result, tests, build, typecheck, lint, filesChanged]
+    AiStage:
+      type: object
+      properties:
+        stage: { type: string, enum: [research_synthesis, coding_agent, failure_diagnosis, repair] }
+        provider: { type: string, enum: [grok, scripted, none] }
+        model: { type: string }
+        requestStatus: { type: string, enum: [success, error, skipped] }
+        success: { type: boolean }
+        timestamp: { type: string, format: date-time }
+        durationMs: { type: ["number", "null"] }
+        attempt: { type: ["number", "null"] }
+        error: { type: ["string", "null"] }
+      required: [stage, provider, model, requestStatus, success, timestamp]
     DashboardSummary:
       type: object
       properties:

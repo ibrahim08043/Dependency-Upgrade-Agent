@@ -46,6 +46,8 @@ export interface GrokProvider {
   chat(messages: ChatMessage[], tools?: ToolDefinition[]): Promise<GrokCompletionResponse>;
   /** Whether the provider is configured (e.g. XAI_API_KEY present). */
   isConfigured(): boolean;
+  /** Resolved model name (e.g. "grok-4-latest"). Used for non-sensitive metadata. */
+  readonly model: string;
 }
 
 export class GrokConfigError extends Error {
@@ -53,6 +55,26 @@ export class GrokConfigError extends Error {
     super(message);
     this.name = "GrokConfigError";
   }
+}
+
+/**
+ * Best-effort sanity check on a configured xAI key so a copy/paste error (e.g. a
+ * Groq `gsk_` key or an Anthropic `sk-ant` key) fails fast with a clear message
+ * instead of surfacing as a confusing 400 from the xAI API on every call.
+ *
+ * We deliberately do NOT reject every key that lacks an `xai-` prefix (future
+ * key formats) — only keys that are clearly empty, too short, or carry another
+ * provider's well-known prefix.
+ */
+export function invalidXaiKeyReason(key: string): string | null {
+  if (!key) return "XAI_API_KEY is not set.";
+  if (key.length < 20) {
+    return "XAI_API_KEY looks too short to be a valid key.";
+  }
+  if (/^(gsk_|sk-ant|sk-proj|sk-svcacct)/.test(key)) {
+    return "XAI_API_KEY does not look like an xAI key (it carries another provider's prefix). Expected a key starting with \"xai-\" from https://console.x.ai.";
+  }
+  return null;
 }
 
 export class GrokApiError extends Error {

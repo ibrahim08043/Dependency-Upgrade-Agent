@@ -19,6 +19,10 @@ const NPM_REGISTRY = "https://registry.npmjs.org";
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_EXCERPT_BYTES = 6000;
 
+function escapeRe(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 interface NpmPackageMetadata {
   name?: string;
   description?: string;
@@ -186,12 +190,10 @@ export async function researchDependency(
   const homepage = npmMeta.homepage;
   const candidates: Array<{ url: string; title: string; type: ResearchSource["source_type"] }> = [];
 
-  // The project's own readme is the most reliable baseline for the target major.
-  const readmeExcerpt = markdownToText(npmMeta.readme ?? "");
-  const readme = research.sources[0];
-
-  // Migration/upgrade guide candidates derived from the repo/docs:
-  // <dep>/blob/main/UPGRADING.md, MIGRATION.md, CHANGELOG.md
+  // Migration/upgrade guide candidates derived from the repo/docs. We fetch the
+  // RAW markdown (cleaner, lighter, more accurate excerpting) but record the
+  // official blob URL as the source so the user opens a readable page whose
+  // content is the same file.
   const repoBase = normalizeGithubRepo(repoUrl, homepage);
   if (repoBase) {
     const guideFiles: Array<[string, ResearchSource["source_type"]]> = [
@@ -211,12 +213,36 @@ export async function researchDependency(
     candidates.push({ url: homepage, title: `${dependency} documentation`, type: "documentation" });
   }
 
+  // 3) GitHub release notes (official release information where available).
+  // The npm metadata's repository is GitHub; releases often carry the clearest
+  // per-major breaking-change notes. We fetch the releases API and keep only
+  // releases that actually mention the target major (or the latest one as a
+  // fallback) so the source is tied to the migration, not invented.
+  let githubOwnerRepo: string | null = null;
+  if (repoBase) {
+    const parts = repoBase.replace("https://github.com/", "").split("/");
+    if (parts.length >= 2) githubOwnerRepo = `${parts[0]}/${parts[1].replace(/\.git$/, "")}`;
+  }
+
   // Fetch each candidate; record real results and unavailable ones separately.
   for (const candidate of candidates) {
     if (research.sources.length >= 8) break;
     let fetched: { title: string; text: string };
+    let fetchUrl = candidate.url;
     try {
-      fetched = await fetchPublicUrl(candidate.url);
+      // Prefer the raw markdown for guide/changelog blobs (same content, lighter).
+      // The source URL we record is still the readable official blob page.
+      if (repoBase && candidate.url.startsWith(`${repoBase}/blob/`)) {
+        const rawCandidate = candidate.url.replace(`${repoBase}/blob/`, `${repoBase.replace("github.com", "raw.githubusercontent.com")}/`);
+        try {
+          fetched = await fetchPublicUrl(rawCandidate);
+          fetchUrl = candidate.url; // display the readable blob URL
+        } catch {
+          fetched = await fetchPublicUrl(candidate.url);
+        }
+      } else {
+        fetched = await fetchPublicUrl(candidate.url);
+      }
     } catch (error) {
       research.sources.push(
         markUnavailableSource(
@@ -235,10 +261,25 @@ export async function researchDependency(
           ? `Changelog retrieved for ${dependency}.`
           : `Documentation retrieved for ${dependency}.`,
     ].filter(Boolean) as string[];
+    // Extract a few real "breaking change" mentions from the guide/changelog text
+    // so findings are content-derived (never invented).
+    if (candidate.type === "official_migration_guide" || candidate.type === "changelog") {
+      for (const line of fetched.text.split(/[.\n!?]+/)) {
+        if (keyFindings.length >= 4) break;
+        const trimmed = line.trim();
+        if (
+          trimmed.length > 24 &&
+          trimmed.length < 220 &&
+          /\b(breaking|removed|rename|deprecat|no longer|migrat)\b/i.test(trimmed)
+        ) {
+          keyFindings.push(trimmed.replace(/\s+/g, " ").slice(0, 200));
+        }
+      }
+    }
     research.sources.push({
       id: randomUUID(),
       title: fetched.title || candidate.title,
-      url: candidate.url,
+      url: fetchUrl,
       source_type: candidate.type,
       retrieved_at: new Date().toISOString(),
       status: "retrieved",
@@ -247,12 +288,71 @@ export async function researchDependency(
     });
   }
 
+  // 4) GitHub release notes (only when the repo is GitHub; best effort).
+  if (githubOwnerRepo && research.sources.length < 8) {
+    const releasesUrl = `https://api.github.com/repos/${encodeURIComponent(githubOwnerRepo)}/releases?per_page=6`;
+    try {
+      const releases = (await fetchJson(releasesUrl)) as Array<{
+        tag_name?: string;
+        name?: string;
+        html_url?: string;
+        body?: string;
+        published_at?: string;
+      }>;
+      const targetRe = new RegExp(`(^|\\D)v?${escapeRe(targetMajor)}(\\D|$)`);
+      const match =
+        releases.find((r) => targetRe.test(r.tag_name ?? "") || targetRe.test(r.name ?? "")) ??
+        releases[0];
+      if (match?.html_url) {
+        const bodyText = markdownToText(match.body ?? "");
+        research.sources.push({
+          id: randomUUID(),
+          title: match.name || `${dependency} release ${match.tag_name ?? ""}` || "GitHub release notes",
+          url: match.html_url,
+          source_type: "official_release_notes",
+          retrieved_at: new Date().toISOString(),
+          status: "retrieved",
+          key_findings: [
+            `Release notes retrieved for ${dependency} (${match.tag_name ?? match.published_at ?? "latest"}).`,
+            ...bodyText
+              .split(/[.\n!?]+/)
+              .map((l) => l.trim())
+              .filter((l) => l.length > 24 && l.length < 220 && /\b(breaking|removed|rename|deprecat|no longer|migrat)\b/i.test(l))
+              .slice(0, 3),
+          ],
+          excerpt: bodyText.slice(0, 3000),
+        });
+      } else if (releases.length === 0) {
+        research.sources.push(
+          markUnavailableSource(releasesUrl, `${dependency} GitHub release notes`, "official_release_notes", "No published releases found for this repository."),
+        );
+      }
+    } catch (error) {
+      research.sources.push(
+        markUnavailableSource(
+          releasesUrl,
+          `${dependency} GitHub release notes`,
+          "official_release_notes",
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
+    }
+  }
+
   // Determine a baseline confidence from what we actually retrieved.
   const retrieved = research.sources.filter((s) => s.status === "retrieved");
   const hasGuide = retrieved.some((s) => s.source_type === "official_migration_guide");
-  research.confidence = hasGuide ? "high" : retrieved.length >= 2 ? "medium" : retrieved.length === 1 ? "low" : "none";
+  const hasReleaseNotes = retrieved.some((s) => s.source_type === "official_release_notes");
+  research.confidence = hasGuide
+    ? "high"
+    : hasReleaseNotes && retrieved.length >= 2
+      ? "high"
+      : retrieved.length >= 2
+        ? "medium"
+        : retrieved.length === 1
+          ? "low"
+          : "none";
 
-  void readme;
   return research;
 }
 

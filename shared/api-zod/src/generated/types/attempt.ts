@@ -5,10 +5,13 @@
  * Dependency Upgrade Agent API
  * OpenAPI spec version: 0.1.0
  */
+import type { AttemptPatchResult } from './attemptPatchResult';
 
 export interface Attempt {
   number: number;
   result: string;
+  /** @nullable */
+  failureType?: string | null;
   /** @nullable */
   diagnosis: string | null;
   filesChanged: number;
@@ -24,4 +27,6 @@ export interface Attempt {
   filesModified?: string[];
   /** @nullable */
   patch?: string | null;
+  /** @nullable */
+  patchResult?: AttemptPatchResult;
 }

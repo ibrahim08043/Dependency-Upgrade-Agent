@@ -1,4 +1,4 @@
-import { GrokApiError, GrokConfigError } from "./types";
+import { GrokApiError, GrokConfigError, invalidXaiKeyReason } from "./types";
 import type {
   ChatMessage,
   GrokCompletionResponse,
@@ -42,7 +42,7 @@ function formatContent(value: unknown): string {
  */
 export class XaiGrokProvider implements GrokProvider {
   private readonly apiKey: string;
-  private readonly model: string;
+  private readonly _model: string;
   private readonly baseUrl = "https://api.x.ai/v1";
   private readonly fetchImpl: typeof fetch;
 
@@ -53,8 +53,14 @@ export class XaiGrokProvider implements GrokProvider {
         "GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable the agent.",
       );
     }
+    const problem = invalidXaiKeyReason(key);
+    if (problem) {
+      throw new GrokConfigError(
+        `GROK_NOT_CONFIGURED: ${problem} Fix XAI_API_KEY in the backend environment (backend/.env).`,
+      );
+    }
     this.apiKey = key;
-    this.model = env.XAI_MODEL || DEFAULT_MODEL;
+    this._model = env.XAI_MODEL || DEFAULT_MODEL;
     this.fetchImpl = fetchImpl;
   }
 
@@ -62,9 +68,14 @@ export class XaiGrokProvider implements GrokProvider {
     return true;
   }
 
+  /** GrokProvider interface: the resolved model name (non-secret metadata). */
+  get model(): string {
+    return this._model;
+  }
+
   async chat(messages: ChatMessage[], tools?: ToolDefinition[]): Promise<GrokCompletionResponse> {
     const body: Record<string, unknown> = {
-      model: this.model,
+      model: this._model,
       temperature: 0,
       messages: messages.map((m) => ({
         role: m.role,

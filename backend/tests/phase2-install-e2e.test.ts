@@ -235,7 +235,9 @@ describe("Dependency Install Failure Handling", () => {
 
       const pkgAfter = JSON.parse(
         await readFile(path.join(testDir, "package.json"), "utf8"),
-      ) as Record<string, unknown>;
+      ) as {
+        dependencies?: Record<string, string>;
+      };
       assert(
         !pkgAfter.dependencies?.["invalid-package-xyz"],
         "Fallback edit should NOT happen",

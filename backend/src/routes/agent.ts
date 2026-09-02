@@ -62,7 +62,7 @@ function publicRepository(repository: Awaited<ReturnType<typeof analyzeRepositor
 }
 
 function publicMigration(migration: NonNullable<Awaited<ReturnType<typeof getMigration>>>) {
-  const { plan: _plan, impactFiles: _impactFiles, sources: _sources, changes: _changes, remainingIssues: _remainingIssues, diff: _diff, agentState, research, riskSummary, verificationCommands, baseline, attempts, cancelled, ...publicData } = migration;
+  const { impactFiles: _impactFiles, sources: _sources, changes: _changes, remainingIssues: _remainingIssues, diff: _diff, agentState, research, riskSummary, verificationCommands, baseline, attempts, cancelled, plan, aiStages, ...publicData } = migration;
   return {
     ...publicData,
     agentState: agentState ?? null,
@@ -72,6 +72,8 @@ function publicMigration(migration: NonNullable<Awaited<ReturnType<typeof getMig
     verificationCommands: verificationCommands ?? [],
     baseline: baseline ?? null,
     cancelled: Boolean(cancelled),
+    plan: plan ?? null,
+    aiStages: aiStages ?? [],
   };
 }
 
@@ -183,6 +185,7 @@ router.get("/migrations/:id/report", async (req, res) => {
     affectedApiFindings: migration.riskSummary?.affectedApis ?? [],
     verificationCommands: migration.verificationCommands ?? [],
     baseline: migration.baseline ?? null,
+    aiStages: migration.aiStages ?? [],
     approvalStatus: migration.status === "approved" ? "APPROVED" : migration.status === "rejected" ? "REJECTED" : migration.status === "completed" ? "PENDING" : String(migration.status),
   });
 });

@@ -291,9 +291,14 @@ export async function scanRepositoryUsage(
       if (foundSection) {
         manifestSections.push(foundSection);
         const version = (manifest[foundSection] as Record<string, string>)[dependency];
+        // Real line number of the dependency's own entry in the manifest.
+        const depLine = content.split(/\r?\n/).findIndex((line) => {
+          const m = line.match(/^\s*["']([^"']+)["']\s*:/);
+          return m?.[1] === dependency;
+        });
         codeFindings.push({
           filePath: rel,
-          line: 0, // package.json has no meaningful import line; 0 = whole manifest
+          line: depLine >= 0 ? depLine + 1 : 0, // 0 only if the entry was not found on a line
           usageType: "PACKAGE_MANIFEST",
           symbol: `${dependency}@${version}`,
           matchedCode: `${foundSection}.${dependency}`,

@@ -22,6 +22,9 @@ export class ScriptedHealProvider implements GrokProvider {
     return true;
   }
 
+  /** Scripted test provider — fixed model name for AI-stage metadata. */
+  readonly model = "scripted-test-model";
+
   async chat(messages: ChatMessage[], _tools?: ToolDefinition[]): Promise<GrokCompletionResponse> {
     this.calls += 1;
     const failureContext = messages.some((m) => m.role === "user" && m.content.includes("REPAIR pass"));

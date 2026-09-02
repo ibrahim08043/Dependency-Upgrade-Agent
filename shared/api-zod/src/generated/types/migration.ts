@@ -5,12 +5,14 @@
  * Dependency Upgrade Agent API
  * OpenAPI spec version: 0.1.0
  */
+import type { AiStage } from './aiStage';
 import type { Attempt } from './attempt';
 import type { BaselineResult } from './baselineResult';
 import type { MigrationAgentState } from './migrationAgentState';
 import type { MigrationBuild } from './migrationBuild';
 import type { MigrationLint } from './migrationLint';
 import type { MigrationMode } from './migrationMode';
+import type { MigrationPlan } from './migrationPlan';
 import type { MigrationResearch } from './migrationResearch';
 import type { MigrationStatus } from './migrationStatus';
 import type { MigrationTests } from './migrationTests';
@@ -52,5 +54,8 @@ export interface Migration {
   verificationCommands?: VerificationCommand[];
   /** @nullable */
   baseline?: BaselineResult | null;
+  /** @nullable */
+  plan?: MigrationPlan | null;
+  aiStages?: AiStage[];
   cancelled?: boolean;
 }

@@ -13,6 +13,7 @@ import {
   getMigration,
   getRepository,
   saveMigration,
+  type AiStageRecord,
   type MigrationRecord,
   type PackageManager,
   type RepositoryRecord,
@@ -23,6 +24,7 @@ import { scanRepositoryUsage } from "./impact";
 import { applyRiskToFindings } from "./risk";
 import { synthesizeFindings, fallbackFindingsFromSources } from "./synthesis";
 import { diagnoseFailure, HealError } from "./heal";
+import { buildFallbackPlan } from "./plan";
 import {
   validateDependency,
   validateTargetVersion,
@@ -39,6 +41,12 @@ import {
 let __migAgentProvider: GrokProvider | null = null;
 export function setMigrationAgentProviderOverride(provider: GrokProvider | null): void {
   __migAgentProvider = provider;
+}
+
+/** Distinguish the injected test seam from the real xAI provider for metadata. */
+function providerKind(provider: GrokProvider | null): string {
+  if (!provider) return "none";
+  return provider === __migAgentProvider ? "scripted" : "grok";
 }
 
 /**
@@ -329,6 +337,24 @@ function verificationPassed(migration: MigrationRecord): boolean {
   return migration.tests !== "fail" && migration.build !== "fail" && migration.typecheck !== "fail" && migration.lint !== "fail";
 }
 
+/**
+ * Map a failed verification command to the precise failure code the spec wants
+ * (TEST_FAILURE / BUILD_FAILURE / TYPECHECK_FAILURE / TIMEOUT), falling back to
+ * the generic VERIFICATION_FAILURE. Derived from the real command + exit code.
+ */
+function failureTypeOf(
+  failed: Array<{ command: string; exitCode: number }>,
+): "TEST_FAILURE" | "BUILD_FAILURE" | "TYPECHECK_FAILURE" | "LINT_FAILURE" | "TIMEOUT" | "VERIFICATION_FAILURE" {
+  if (failed.length === 0) return "VERIFICATION_FAILURE";
+  const first = failed[0];
+  if (first.exitCode === 124) return "TIMEOUT";
+  if (first.command.endsWith("test")) return "TEST_FAILURE";
+  if (first.command.endsWith("build")) return "BUILD_FAILURE";
+  if (first.command.endsWith("typecheck")) return "TYPECHECK_FAILURE";
+  if (first.command.endsWith("lint")) return "LINT_FAILURE";
+  return "VERIFICATION_FAILURE";
+}
+
 export async function runMigration(migrationId: string): Promise<void> {
   const migration = await getMigration(migrationId);
   if (!migration) return;
@@ -344,6 +370,33 @@ export async function runMigration(migrationId: string): Promise<void> {
   const emitAgentEvent = async (level: "info" | "success" | "warning" | "error", message: string) => {
     await addEvent({ id: randomUUID(), migrationId, timestamp: new Date().toISOString(), level, message });
     logger.info({ migrationId, level, message }, "Agent event");
+  };
+
+  /**
+   * Phase 3 — persist a non-sensitive record of every real AI request. Never
+   * stores the API key or chain-of-thought, only stage/provider/model/status.
+   */
+  const recordAiStage = async (
+    stage: AiStageRecord["stage"],
+    provider: GrokProvider | null,
+    requestStatus: AiStageRecord["requestStatus"],
+    extra: { durationMs?: number; attempt?: number; error?: string } = {},
+  ) => {
+    migration.aiStages = migration.aiStages ?? [];
+    migration.aiStages.push({
+      stage,
+      provider: providerKind(provider),
+      model: provider?.model ?? "unknown",
+      requestStatus,
+      success: requestStatus === "success",
+      timestamp: new Date().toISOString(),
+      durationMs: extra.durationMs,
+      attempt: extra.attempt,
+      error: extra.error ? String(extra.error).slice(0, 200) : undefined,
+    });
+    if (migration.aiStages.length > 200) migration.aiStages = migration.aiStages.slice(-200);
+    migration.updatedAt = new Date().toISOString();
+    await saveMigration(migration);
   };
 
   try {
@@ -394,6 +447,7 @@ export async function runMigration(migrationId: string): Promise<void> {
     let synthesized: import("./research-types").MigrationFindings;
     try {
       const provider = getLiveGrokProviderOrNull();
+      const synthesisStart = Date.now();
       synthesized = provider
         ? await synthesizeFindings(provider, {
             dependency: migration.dependency,
@@ -409,8 +463,11 @@ export async function runMigration(migrationId: string): Promise<void> {
             },
           })
         : fallbackFindingsFromSources(retrieved);
+      await recordAiStage("research_synthesis", provider, "success", { durationMs: Date.now() - synthesisStart });
       await update("research", "Research synthesis completed", "success");
     } catch (error) {
+      const provider = getLiveGrokProviderOrNull();
+      await recordAiStage("research_synthesis", provider, "error", { error: String(error) });
       synthesized = fallbackFindingsFromSources(retrieved);
       migration.remainingIssues.push(`RESEARCH_SYNTHESIS_FAILED: ${error instanceof Error ? error.message : String(error)}`);
       await update("research", "Research synthesis degraded to retrieved-source summary", "warning");
@@ -429,8 +486,23 @@ export async function runMigration(migrationId: string): Promise<void> {
     }
     migration.research = research;
     if (research.confidence === "none") {
-      migration.remainingIssues.push("Reliable migration information could not be established.");
-      await update("research", "Reliable migration information could not be established", "warning");
+      const why = unavailableCount
+        ? `${unavailableCount} of ${research.sources.length} source(s) could not be accessed`
+        : "no documentation sources were retrieved";
+      migration.remainingIssues.push("Migration research confidence: LOW. No reliable migration information was retrieved.");
+      migration.research.explicitLowConfidenceReason =
+        `Migration research confidence: LOW — ${why} for ${migration.dependency}.`;
+      await update("research", `Migration research confidence: LOW — ${why}`, "warning");
+      await addEvent({
+        id: randomUUID(),
+        migrationId,
+        timestamp: new Date().toISOString(),
+        level: "warning",
+        message: `Migration research confidence: LOW. Reason: ${why}.`,
+      });
+    } else if (research.confidence === "low") {
+      migration.remainingIssues.push("Migration research confidence: LOW — only one documentation source was retrieved.");
+      await update("research", "Migration research confidence: LOW (single source)", "warning");
     }
 
     // ---- Phase 2: repository-aware impact analysis + research correlation ----
@@ -566,115 +638,148 @@ export async function runMigration(migrationId: string): Promise<void> {
     migration.attemptNumber = 1;
     await update("migration", "Dependency updated; agent will now migrate code usages");
 
-    // 5) Run the coding agent against the live Grok provider.
+    // 5) Run the coding agent against the live Grok provider (agentic mode only).
+    // Baseline mode deliberately skips AI source edits — research/impact (read-only),
+    // install, and a single verification still run, but no agent patches are made.
     let agentState: import("../agents/agent-state").AgentState | undefined;
     let agentFinished = true;
-    logger.info({ migrationId, dependency: migration.dependency, workspaceRoot: repository.rootPath }, "[MIGRATION] Starting coding agent");
-try {
-      // Tests may inject a scripted provider; otherwise use the live xAI/Grok one.
-      const provider = __migAgentProvider ?? getGrokProvider();
-      logger.info({ migrationId, providerConfigured: provider.isConfigured(), model: provider.constructor.name }, "[MIGRATION] Agent provider resolved");
-      logger.info(
-        { migrationId, XAI_API_KEY_present: Boolean(process.env.XAI_API_KEY), XAI_API_KEY_length: process.env.XAI_API_KEY?.length ?? 0 },
-        "[MIGRATION] Environment check before Grok call",
-      );
-      const agentStart = Date.now();
-      const research = migration.research;
-      const riskS = migration.riskSummary;
-      const researchSummary = research
-        ? [
-            `- Confidence: ${research.confidence}`,
-            research.breakingChanges.length ? `- Breaking changes: ${research.breakingChanges.join("; ")}` : null,
-            research.removedApis.length ? `- Removed APIs: ${research.removedApis.join("; ")}` : null,
-            research.renamedApis.length ? `- Renamed APIs: ${research.renamedApis.join("; ")}` : null,
-            research.changedApis.length ? `- Changed APIs: ${research.changedApis.join("; ")}` : null,
-            research.configurationChanges.length ? `- Config changes: ${research.configurationChanges.join("; ")}` : null,
-            research.importChanges.length ? `- Import changes: ${research.importChanges.join("; ")}` : null,
-          ]
-            .filter(Boolean)
-            .join("\n")
-        : "";
-      const impactSummary = scan.codeFindings.length
-        ? scan.codeFindings
-            .slice(0, 80)
-            .map((f) => `${f.filePath}:${f.line} [${f.usageType}] ${f.symbol} — ${f.matchedCode}`)
-            .join("\n")
-        : "";
-      const riskSummary = riskS
-        ? `High=${riskS.high}, Medium=${riskS.medium}, Low=${riskS.low}. Affected APIs: ${riskS.affectedApis.join(", ") || "none"}.`
-        : "";
-      const result = await runCodingAgent(provider, {
+    if (migration.mode === "baseline") {
+      await addEvent({
+        id: randomUUID(),
         migrationId,
-        workspaceRoot: repository.rootPath,
-        originalRoot: path.join(path.dirname(repository.rootPath), "original"),
+        timestamp: new Date().toISOString(),
+        level: "info",
+        message: "Baseline mode: skipping agent code migration (no AI source edits)",
+      });
+    } else {
+      logger.info({ migrationId, dependency: migration.dependency, workspaceRoot: repository.rootPath }, "[MIGRATION] Starting coding agent");
+      let agentProviderUsed: GrokProvider | null = null;
+      try {
+        // Tests may inject a scripted provider; otherwise use the live xAI/Grok one.
+        const provider = __migAgentProvider ?? getGrokProvider();
+        agentProviderUsed = provider;
+        logger.info({ migrationId, providerConfigured: provider.isConfigured(), model: provider.constructor.name }, "[MIGRATION] Agent provider resolved");
+        logger.info(
+          { migrationId, XAI_API_KEY_present: Boolean(process.env.XAI_API_KEY), XAI_API_KEY_length: process.env.XAI_API_KEY?.length ?? 0 },
+          "[MIGRATION] Environment check before Grok call",
+        );
+        const agentStart = Date.now();
+        const research = migration.research;
+        const riskS = migration.riskSummary;
+        const researchSummary = research
+          ? [
+              `- Confidence: ${research.confidence}`,
+              research.breakingChanges.length ? `- Breaking changes: ${research.breakingChanges.join("; ")}` : null,
+              research.removedApis.length ? `- Removed APIs: ${research.removedApis.join("; ")}` : null,
+              research.renamedApis.length ? `- Renamed APIs: ${research.renamedApis.join("; ")}` : null,
+              research.changedApis.length ? `- Changed APIs: ${research.changedApis.join("; ")}` : null,
+              research.configurationChanges.length ? `- Config changes: ${research.configurationChanges.join("; ")}` : null,
+              research.importChanges.length ? `- Import changes: ${research.importChanges.join("; ")}` : null,
+            ]
+              .filter(Boolean)
+              .join("\n")
+          : "";
+        const impactSummary = scan.codeFindings.length
+          ? scan.codeFindings
+              .slice(0, 80)
+              .map((f) => `${f.filePath}:${f.line} [${f.usageType}] ${f.symbol} — ${f.matchedCode}`)
+              .join("\n")
+          : "";
+        const riskSummary = riskS
+          ? `High=${riskS.high}, Medium=${riskS.medium}, Low=${riskS.low}. Affected APIs: ${riskS.affectedApis.join(", ") || "none"}.`
+          : "";
+        const result = await runCodingAgent(provider, {
+          migrationId,
+          workspaceRoot: repository.rootPath,
+          originalRoot: path.join(path.dirname(repository.rootPath), "original"),
+          dependency: migration.dependency,
+          currentVersion: migration.oldVersion,
+          targetMajor: migration.targetVersion.split(".")[0],
+          mode: migration.mode,
+          researchSummary,
+          impactSummary,
+          riskSummary,
+        }, {
+          onEvent: (level, message) => void emitAgentEvent(level as "info" | "success" | "warning" | "error", message),
+        });
+        await recordAiStage("coding_agent", provider, "success", { durationMs: Date.now() - agentStart });
+        logger.info(
+          {
+            migrationId,
+            resultStatus: result.status,
+            patchesApplied: result.patchesApplied,
+            toolCalls: result.agentState?.toolCalls?.length ?? 0,
+            filesModified: result.agentState?.filesModified?.length ?? 0,
+            filesInspected: result.agentState?.filesInspected?.length ?? 0,
+            durationMs: Date.now() - agentStart,
+          },
+          "[MIGRATION] Coding agent completed",
+        );
+        agentState = result.agentState;
+        migration.plan = result.plan
+          ? {
+              summary: result.plan.plannedChanges.join("; ") || `Upgrade ${migration.dependency}.`,
+              breakingChanges: result.plan.breakingChanges,
+              plannedChanges: result.plan.plannedChanges,
+              validationCommands: result.plan.verificationCommands,
+              migrationFindings: result.plan.migrationFindings ?? [],
+              affectedApis: result.plan.affectedApis ?? [],
+              riskAssessment: result.plan.riskAssessment ?? [],
+              plannedPackageChanges: result.plan.plannedPackageChanges ?? [],
+              plannedSourceChanges: result.plan.plannedSourceChanges ?? [],
+              plannedConfigChanges: result.plan.plannedConfigChanges ?? [],
+              potentialFailurePoints: result.plan.potentialFailurePoints ?? [],
+              researchConfidence: result.plan.researchConfidence,
+            }
+          : migration.plan;
+        migration.agentState = result.agentState;
+        if (result.patchesApplied > 0) {
+          migration.changes.push(`Applied ${result.patchesApplied} targeted migration patch(es)`);
+        }
+        if (result.status === "no_changes") {
+          migration.changes.push("Migration agent determined no code changes were required");
+        }
+      } catch (agentError) {
+        await recordAiStage("coding_agent", agentProviderUsed, "error", { error: String(agentError) });
+        agentFinished = false;
+        const message = String(agentError).slice(0, 1800);
+        migration.remainingIssues.push(message);
+        migration.agentState = {
+          ...(migration.agentState ?? {
+            toolCalls: [],
+            filesInspected: [],
+            filesModified: [],
+            patchesApplied: 0,
+            fileChanges: [],
+          }),
+          status: "failed",
+          currentAction: "failed",
+          error: message,
+        };
+        logger.error({ err: agentError, migrationId }, "Coding agent failed");
+        // Still continue to verification against the baseline + manifest change
+        // so a Grok outage doesn't silently leave no diff at all. Non-fatal.
+      }
+      if (agentFinished) {
+        await update("migration", "Agent applied targeted changes to the repository", "success");
+      }
+    }
+    // If no agent plan was produced (baseline, Grok outage, or the agent returned
+    // none), build an honest structured plan from real research + impact + repo
+    // metadata — never a fabricated one.
+    if (!migration.plan) {
+      migration.plan = buildFallbackPlan({
         dependency: migration.dependency,
         currentVersion: migration.oldVersion,
-        targetMajor: migration.targetVersion.split(".")[0],
-        mode: migration.mode,
-        researchSummary,
-        impactSummary,
-        riskSummary,
-      }, {
-        onEvent: (level, message) => void emitAgentEvent(level as "info" | "success" | "warning" | "error", message),
+        targetVersion: migration.targetVersion,
+        research: migration.research,
+        riskSummary: migration.riskSummary,
+        packageManager: repository.packageManager,
+        scripts: repository.scripts,
+        language: repository.language,
+        changes: migration.changes,
+        agentRan: migration.mode === "agentic" && agentFinished,
       });
-      logger.info(
-        {
-          migrationId,
-          resultStatus: result.status,
-          patchesApplied: result.patchesApplied,
-          toolCalls: result.agentState?.toolCalls?.length ?? 0,
-          filesModified: result.agentState?.filesModified?.length ?? 0,
-          filesInspected: result.agentState?.filesInspected?.length ?? 0,
-          durationMs: Date.now() - agentStart,
-        },
-        "[MIGRATION] Coding agent completed",
-      );
-      agentState = result.agentState;
-      migration.plan = result.plan
-        ? {
-            summary: result.plan.plannedChanges.join("; ") || `Upgrade ${migration.dependency}.`,
-            breakingChanges: result.plan.breakingChanges,
-            plannedChanges: result.plan.plannedChanges,
-            validationCommands: result.plan.verificationCommands,
-            migrationFindings: result.plan.migrationFindings ?? [],
-            affectedApis: result.plan.affectedApis ?? [],
-            riskAssessment: result.plan.riskAssessment ?? [],
-            plannedPackageChanges: result.plan.plannedPackageChanges ?? [],
-            plannedSourceChanges: result.plan.plannedSourceChanges ?? [],
-            plannedConfigChanges: result.plan.plannedConfigChanges ?? [],
-            potentialFailurePoints: result.plan.potentialFailurePoints ?? [],
-            researchConfidence: result.plan.researchConfidence,
-          }
-        : migration.plan;
-      migration.agentState = result.agentState;
-      if (result.patchesApplied > 0) {
-        migration.changes.push(`Applied ${result.patchesApplied} targeted migration patch(es)`);
-      }
-      if (result.status === "no_changes") {
-        migration.changes.push("Migration agent determined no code changes were required");
-      }
-    } catch (agentError) {
-      agentFinished = false;
-      const message = String(agentError).slice(0, 1800);
-      migration.remainingIssues.push(message);
-      migration.agentState = {
-        ...(migration.agentState ?? {
-          toolCalls: [],
-          filesInspected: [],
-          filesModified: [],
-          patchesApplied: 0,
-          fileChanges: [],
-        }),
-        status: "failed",
-        currentAction: "failed",
-        error: message,
-      };
-      logger.error({ err: agentError, migrationId }, "Coding agent failed");
-      // Still continue to verification against the baseline + manifest change
-      // so a Grok outage doesn't silently leave no diff at all. Non-fatal.
-    }
-    if (agentFinished) {
-      await update("migration", "Agent applied targeted changes to the repository", "success");
     }
 
     // 6) Verification + self-healing retry loop (agentic only).
@@ -697,23 +802,38 @@ try {
 
     migration.attemptNumber = 1;
     let healRounds = 0;
+    let lastRepairPatchResult: "applied" | "failed" | "skipped" = "skipped";
     const isCancelled = () => migration.cancelled === true;
 
     // Record a verification attempt into state.
-    const recordAttempt = async (number: number, passedNow: boolean, diagnosis: string | null, patchOverride?: string) => {
+    const recordAttempt = async (
+      number: number,
+      passedNow: boolean,
+      diagnosis: string | null,
+      failureInfo: Array<{ command: string; exitCode: number; stdout: string; stderr: string }>,
+      patchOverride?: string,
+      patchResult?: "applied" | "failed" | "skipped",
+    ) => {
       const filesModified = migration.agentState?.filesModified ?? [];
       migration.attempts[number - 1] = {
         number,
         result: passedNow ? "PASS" : "FAIL",
+        // The precise check that failed, derived from the real command + exit code.
+        failureType: passedNow ? undefined : failureTypeOf(failureInfo),
         diagnosis,
         filesChanged: migration.diff?.filesChanged ?? 0,
+        command: failureInfo[0]?.command,
+        exitCode: failureInfo[0]?.exitCode,
+        stdout: failureInfo[0]?.stdout.slice(0, 2000),
+        stderr: failureInfo[0]?.stderr.slice(0, 2000),
         filesModified,
         filesInspected: migration.agentState?.filesInspected ?? [],
         patch: patchOverride,
+        patchResult,
       };
       migration.attemptNumber = number;
       await saveMigration(migration);
-      await emitAgentEvent(passedNow ? "success" : "error", `Attempt ${number} — ${passedNow ? "PASS" : "FAIL"}`);
+      await emitAgentEvent(passedNow ? "success" : "error", `Attempt ${number} — ${passedNow ? "PASS" : "FAIL"}${passedNow ? "" : ` (${failureTypeOf(failureInfo)})`}`);
     };
 
     const refreshedMigration = async () => (await getMigration(migrationId)) ?? migration;
@@ -723,7 +843,14 @@ try {
     migration.diff = await captureDiff(repository.rootPath);
 
     let passed = verificationPassed(migration) && !isCancelled();
-    await recordAttempt(1, passed && !isCancelled(), passed ? null : (failed[0]?.stderr || failed[0]?.stdout || "Verification command failed.").slice(0, 900));
+    await recordAttempt(
+      1,
+      passed && !isCancelled(),
+      passed ? null : (failed[0]?.stderr || failed[0]?.stdout || "Verification command failed.").slice(0, 900),
+      failed,
+      undefined,
+      "skipped", // attempt 1 has no corrective patch yet
+    );
 
     // Baseline mode: no autonomous diagnosis/repair. Agentic mode self-heals.
     if (migration.mode === "baseline") {
@@ -749,6 +876,7 @@ try {
       try {
         const provider = healProvider();
         if (!provider) throw new HealError("HEAL_UNAVAILABLE: no Grok provider");
+        const diagStart = Date.now();
         const d = await diagnoseFailure(provider, {
           dependency: migration.dependency,
           oldVersion: migration.oldVersion,
@@ -760,9 +888,17 @@ try {
           filesModified: migration.agentState?.filesModified ?? [],
           affectedFiles: migration.impactFiles,
         });
+        await recordAiStage("failure_diagnosis", provider, "success", {
+          durationMs: Date.now() - diagStart,
+          attempt: migration.attemptNumber + 1,
+        });
         diagnosis = d.summary;
         diagnosisOk = true;
       } catch (diagError) {
+        await recordAiStage("failure_diagnosis", healProvider(), "error", {
+          error: String(diagError),
+          attempt: migration.attemptNumber + 1,
+        });
         const msg = diagError instanceof Error ? diagError.message : String(diagError);
         const short = msg.slice(0, 500);
         if (!migration.remainingIssues.includes(short)) migration.remainingIssues.push(short);
@@ -778,6 +914,7 @@ try {
       if (repairProvider) {
         try {
           const current = await refreshedMigration();
+          const repairStart = Date.now();
           const repairResult = await runCodingAgent(repairProvider, {
             migrationId,
             workspaceRoot: repository.rootPath,
@@ -795,16 +932,27 @@ try {
             failureContext: { diagnosis, failedCommands: failed.map((f) => f.command) },
             onEvent: (level, message) => void emitAgentEvent(level as "info" | "success" | "warning" | "error", message),
           });
+          await recordAiStage("repair", repairProvider, "success", {
+            durationMs: Date.now() - repairStart,
+            attempt: migration.attemptNumber + 1,
+          });
           await refreshedMigration();
+          lastRepairPatchResult = repairResult.patchesApplied > 0 ? "applied" : "skipped";
           if (repairResult.patchesApplied > 0) {
             migration.changes.push(`Corrective patch (attempt ${migration.attemptNumber + 1}): ${repairResult.patchesApplied} patch(es)`);
           }
           void current;
         } catch (repairError) {
+          await recordAiStage("repair", repairProvider, "error", {
+            error: String(repairError),
+            attempt: migration.attemptNumber + 1,
+          });
+          lastRepairPatchResult = "failed";
           const short = `Corrective patch failed: ${repairError instanceof Error ? repairError.message : String(repairError)}`.slice(0, 500);
           if (!migration.remainingIssues.includes(short)) migration.remainingIssues.push(short);
         }
       } else {
+        lastRepairPatchResult = "skipped";
         const short = "Corrective patch skipped — no Grok provider available for repair.";
         if (!migration.remainingIssues.includes(short)) migration.remainingIssues.push(short);
       }
@@ -815,7 +963,14 @@ try {
       await runCommand("git", ["add", "-N", "."], { cwd: repository.rootPath });
       migration.diff = await captureDiff(repository.rootPath);
       passed = verificationPassed(migration) && !isCancelled();
-      await recordAttempt(migration.attemptNumber + 1, passed && !isCancelled(), passed ? null : (failed[0]?.stderr || failed[0]?.stdout || "Verification command failed.").slice(0, 900));
+      await recordAttempt(
+        migration.attemptNumber + 1,
+        passed && !isCancelled(),
+        passed ? null : (failed[0]?.stderr || failed[0]?.stdout || "Verification command failed.").slice(0, 900),
+        failed,
+        undefined,
+        lastRepairPatchResult,
+      );
     }
 
     // 7) Final status + diff.
@@ -828,7 +983,9 @@ try {
     }
 
     migration.status = passed ? "completed" : "failed";
-    migration.errorCode = passed ? null : "VERIFICATION_FAILURE";
+    // Precise failure code (TEST_FAILURE / BUILD_FAILURE / TYPECHECK_FAILURE /
+    // TIMEOUT / VERIFICATION_FAILURE) derived from the real failing command.
+    migration.errorCode = passed ? null : failureTypeOf(failed);
     if (migration.agentState) {
       migration.agentState.status = passed ? "completed" : "failed";
       migration.agentState.currentAction = passed ? "complete" : "failed";

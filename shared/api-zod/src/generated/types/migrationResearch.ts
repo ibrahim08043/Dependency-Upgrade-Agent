@@ -24,4 +24,6 @@ export interface MigrationResearch {
   upgradeNotes?: string[];
   findings?: MigrationFinding[];
   confidence: MigrationResearchConfidence;
+  /** @nullable */
+  explicitLowConfidenceReason?: string | null;
 }
