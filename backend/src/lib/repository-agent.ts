@@ -1066,6 +1066,7 @@ export async function startMigration(
     attempts: [],
     remainingIssues: [],
     diff: { filesChanged: 0, additions: 0, deletions: 0, files: [] },
+    aiStages: [],
   };
   await createMigration(migration);
   await addEvent({
