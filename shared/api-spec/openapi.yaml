@@ -30,6 +30,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /health:
+    get:
+      operationId: healthCheckAlias
+      tags: [health]
+      summary: Health check (alias)
+      description: Alias of /healthz
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
   /dashboard:
     get:
       operationId: getDashboard
@@ -205,6 +218,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Migration"
+  /migrations/{id}/reject:
+    post:
+      operationId: rejectMigration
+      tags: [migrations]
+      summary: Reject a completed migration
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Rejected migration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Migration"
+        "409":
+          description: Migration not in a completed state
   /migrations/{id}/cancel:
     post:
       operationId: cancelMigration
@@ -240,6 +269,8 @@ components:
       properties:
         file:
           type: string
+          format: binary
+          description: The ZIP archive of the repository to analyze.
       required: [file]
     GithubRepositoryInput:
       type: object
@@ -332,6 +363,25 @@ components:
                   action: { type: string }
             agentSummary: { type: ["string", "null"] }
             error: { type: ["string", "null"] }
+        research:
+          type: ["object", "null"]
+          $ref: "#/components/schemas/MigrationResearch"
+        riskSummary:
+          type: ["object", "null"]
+          $ref: "#/components/schemas/RiskSummary"
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Attempt"
+        verificationCommands:
+          type: array
+          items:
+            $ref: "#/components/schemas/VerificationCommand"
+        baseline:
+          type: ["object", "null"]
+          $ref: "#/components/schemas/BaselineResult"
+        cancelled:
+          type: boolean
       required: [id, repositoryId, repositoryName, dependency, oldVersion, targetVersion, mode, status, currentStage, attemptNumber, affectedFiles, affectedUsages, tests, build, typecheck, lint, errorCode, createdAt, updatedAt]
     AgentToolCall:
       type: object
@@ -395,6 +445,28 @@ components:
         remainingIssues:
           type: array
           items: { type: string }
+        research:
+          type: ["object", "null"]
+          $ref: "#/components/schemas/MigrationResearch"
+        riskSummary:
+          type: ["object", "null"]
+          $ref: "#/components/schemas/RiskSummary"
+        affectedApiFindings:
+          type: array
+          items: { type: string }
+        plan:
+          type: ["object", "null"]
+          $ref: "#/components/schemas/MigrationPlan"
+        verificationCommands:
+          type: array
+          items:
+            $ref: "#/components/schemas/VerificationCommand"
+        baseline:
+          type: ["object", "null"]
+          $ref: "#/components/schemas/BaselineResult"
+        approvalStatus:
+          type: string
+          enum: [APPROVED, REJECTED, PENDING]
       required: [migrationId, status, summary, repository, impact, sources, changes, attempts, remainingIssues]
     RepositorySummary:
       type: object
@@ -420,6 +492,144 @@ components:
         url: { type: string }
         finding: { type: string }
       required: [title, url, finding]
+    MigrationResearchSource:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        url: { type: string }
+        source_type: { type: string }
+        retrieved_at: { type: string, format: date-time }
+        status: { type: string, enum: [retrieved, unavailable] }
+        reason: { type: ["string", "null"] }
+        key_findings:
+          type: array
+          items: { type: string }
+        excerpt: { type: string }
+      required: [id, title, url, source_type, retrieved_at, status, key_findings, excerpt]
+    MigrationFinding:
+      type: object
+      properties:
+        category: { type: string }
+        title: { type: string }
+        description: { type: string }
+        sourceId: { type: ["string", "null"] }
+        sourceUrl: { type: ["string", "null"] }
+        evidence: { type: string }
+        confident: { type: boolean }
+      required: [category, title, description, evidence, confident]
+    MigrationPlan:
+      type: object
+      properties:
+        summary: { type: string }
+        breakingChanges:
+          type: array
+          items: { type: string }
+        plannedChanges:
+          type: array
+          items: { type: string }
+        validationCommands:
+          type: array
+          items: { type: string }
+        migrationFindings:
+          type: array
+          items: { type: string }
+        affectedApis:
+          type: array
+          items: { type: string }
+        riskAssessment:
+          type: array
+          items: { type: string }
+        plannedPackageChanges:
+          type: array
+          items: { type: string }
+        plannedSourceChanges:
+          type: array
+          items: { type: string }
+        plannedConfigChanges:
+          type: array
+          items: { type: string }
+        potentialFailurePoints:
+          type: array
+          items: { type: string }
+        researchConfidence:
+          type: string
+          enum: [high, medium, low, none]
+      required: [summary, breakingChanges, plannedChanges, validationCommands]
+    MigrationResearch:
+      type: object
+      properties:
+        dependency: { type: string }
+        currentVersion: { type: string }
+        targetVersion: { type: string }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/MigrationResearchSource" }
+        breakingChanges:
+          type: array
+          items: { type: string }
+        removedApis:
+          type: array
+          items: { type: string }
+        renamedApis:
+          type: array
+          items: { type: string }
+        changedApis:
+          type: array
+          items: { type: string }
+        configurationChanges:
+          type: array
+          items: { type: string }
+        importChanges:
+          type: array
+          items: { type: string }
+        compatibilityRequirements:
+          type: array
+          items: { type: string }
+        upgradeNotes:
+          type: array
+          items: { type: string }
+        findings:
+          type: array
+          items: { $ref: "#/components/schemas/MigrationFinding" }
+        confidence: { type: string, enum: [high, medium, low, none] }
+      required: [dependency, currentVersion, targetVersion, sources, confidence]
+    ImpactFinding:
+      type: object
+      properties:
+        filePath: { type: string }
+        line: { type: number }
+        usageType: { type: string }
+        symbol: { type: string }
+        matchedCode: { type: string }
+        reason: { type: string }
+        confidence: { type: string }
+        risk: { type: string }
+      required: [filePath, line, usageType, symbol, matchedCode, reason, confidence, risk]
+    RiskSummary:
+      type: object
+      properties:
+        affectedFiles: { type: number }
+        affectedUsages: { type: number }
+        high: { type: number }
+        medium: { type: number }
+        low: { type: number }
+        affectedApis:
+          type: array
+          items: { type: string }
+        affectedConfig:
+          type: array
+          items: { type: string }
+        affectedTests:
+          type: array
+          items: { type: string }
+        affectedBuildLint:
+          type: array
+          items: { type: string }
+        findings:
+          type: array
+          items: { $ref: "#/components/schemas/ImpactFinding" }
+      required: [affectedFiles, affectedUsages, high, medium, low, affectedApis, affectedConfig, affectedTests, affectedBuildLint]
     Attempt:
       type: object
       properties:
@@ -427,7 +637,38 @@ components:
         result: { type: string }
         diagnosis: { type: ["string", "null"] }
         filesChanged: { type: number }
+        command: { type: ["string", "null"] }
+        exitCode: { type: ["number", "null"] }
+        stdout: { type: ["string", "null"] }
+        stderr: { type: ["string", "null"] }
+        filesInspected:
+          type: array
+          items: { type: string }
+        filesModified:
+          type: array
+          items: { type: string }
+        patch: { type: ["string", "null"] }
       required: [number, result, diagnosis, filesChanged]
+    VerificationCommand:
+      type: object
+      properties:
+        command: { type: string }
+        status: { type: string, enum: [PASS, FAIL, SKIPPED, TIMEOUT] }
+        exitCode: { type: ["number", "null"] }
+        stdout: { type: string }
+        stderr: { type: string }
+        durationMs: { type: number }
+      required: [command, status, exitCode, stdout, stderr, durationMs]
+    BaselineResult:
+      type: object
+      properties:
+        result: { type: string }
+        tests: { type: string }
+        build: { type: string }
+        typecheck: { type: string }
+        lint: { type: string }
+        filesChanged: { type: number }
+      required: [result, tests, build, typecheck, lint, filesChanged]
     DashboardSummary:
       type: object
       properties:

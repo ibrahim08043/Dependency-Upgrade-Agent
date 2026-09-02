@@ -15,8 +15,29 @@ import {
   importGithubWorkspace,
   startMigration,
 } from "../lib/repository-agent";
+import { ZipSecurityError } from "../lib/zip";
 
 const router: IRouter = Router();
+
+/** Extract a clean machine-readable error code + message from a thrown error. */
+function errorPayload(error: unknown): { error: string } {
+  // Prefer the error's `code`/`name` over `instanceof` — the tsx/esbuild loader can
+  // produce a duplicate class identity so `instanceof ZipSecurityError` is unreliable.
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    typeof (error as { code?: unknown }).code === "string" &&
+    (error as { name?: unknown }).name === "ZipSecurityError"
+  ) {
+    const err = error as { code: string; message: string };
+    const detail = err.message.replace(/^[A-Z_]+:\s*/, "");
+    return { error: `${err.code}: ${detail}` };
+  }
+  const message = String(error)
+    .replace(/^Error:\s*/, "")
+    .replace(/^(?:ZipSecurityError|Error):\s*/, "");
+  return { error: message };
+}
 
 function readUploadedZip(body: unknown, contentType: string | undefined): { bytes: Buffer; filename: string } {
   if (!Buffer.isBuffer(body)) return { bytes: Buffer.alloc(0), filename: "repository.zip" };
@@ -41,8 +62,17 @@ function publicRepository(repository: Awaited<ReturnType<typeof analyzeRepositor
 }
 
 function publicMigration(migration: NonNullable<Awaited<ReturnType<typeof getMigration>>>) {
-  const { plan: _plan, impactFiles: _impactFiles, sources: _sources, changes: _changes, attempts: _attempts, remainingIssues: _remainingIssues, diff: _diff, agentState, ...publicData } = migration;
-  return { ...publicData, agentState: agentState ?? null };
+  const { plan: _plan, impactFiles: _impactFiles, sources: _sources, changes: _changes, remainingIssues: _remainingIssues, diff: _diff, agentState, research, riskSummary, verificationCommands, baseline, attempts, cancelled, ...publicData } = migration;
+  return {
+    ...publicData,
+    agentState: agentState ?? null,
+    research: research ?? null,
+    riskSummary: riskSummary ?? null,
+    attempts: attempts ?? [],
+    verificationCommands: verificationCommands ?? [],
+    baseline: baseline ?? null,
+    cancelled: Boolean(cancelled),
+  };
 }
 
 router.get("/dashboard", async (_req, res) => {
@@ -61,14 +91,14 @@ router.post("/repositories/upload", async (req, res) => {
   try {
     const upload = readUploadedZip(req.body, req.header("content-type"));
     const bytes = upload.bytes;
-    if (!bytes.length) return res.status(400).json({ error: "REPOSITORY_INVALID: empty upload" });
+    if (!bytes.length) return res.status(400).json({ error: "INVALID_FILE_TYPE: empty upload" });
     const filename = String(req.header("x-repository-name") ?? upload.filename);
     const workspace = await createRepositoryWorkspace(bytes, filename);
     const repository = await analyzeRepository(workspace.rootPath, "zip");
     await saveRepository(repository);
     return res.status(201).json(publicRepository(repository));
   } catch (error) {
-    return res.status(400).json({ error: String(error).replace(/^Error:\s*/, "") });
+    return res.status(400).json(errorPayload(error));
   }
 });
 
@@ -80,7 +110,7 @@ router.post("/repositories/github", async (req, res) => {
     await saveRepository(repository);
     return res.status(201).json(publicRepository(repository));
   } catch (error) {
-    return res.status(400).json({ error: String(error).replace(/^Error:\s*/, "") });
+    return res.status(400).json(errorPayload(error));
   }
 });
 
@@ -103,7 +133,7 @@ router.post("/migrations", async (req, res) => {
     const migration = await startMigration(repositoryId, dependency, String(targetMajor), mode === "baseline" ? "baseline" : "agentic");
     return res.status(202).json(publicMigration(migration));
   } catch (error) {
-    return res.status(400).json({ error: String(error).replace(/^Error:\s*/, "") });
+    return res.status(400).json(errorPayload(error));
   }
 });
 
@@ -146,6 +176,14 @@ router.get("/migrations/:id/report", async (req, res) => {
     changes: migration.changes,
     attempts: migration.attempts,
     remainingIssues: migration.remainingIssues,
+    // Phase 2 structured data
+    research: migration.research ?? null,
+    riskSummary: migration.riskSummary ?? null,
+    plan: migration.plan,
+    affectedApiFindings: migration.riskSummary?.affectedApis ?? [],
+    verificationCommands: migration.verificationCommands ?? [],
+    baseline: migration.baseline ?? null,
+    approvalStatus: migration.status === "approved" ? "APPROVED" : migration.status === "rejected" ? "REJECTED" : migration.status === "completed" ? "PENDING" : String(migration.status),
   });
 });
 
@@ -160,10 +198,22 @@ router.post("/migrations/:id/approve", async (req, res) => {
   return res.json(publicMigration(migration));
 });
 
+router.post("/migrations/:id/reject", async (req, res) => {
+  const migration = await getMigration(req.params.id);
+  if (!migration) return res.status(404).json({ error: "MIGRATION_NOT_FOUND" });
+  if (migration.status !== "completed") return res.status(409).json({ error: "MIGRATION_NOT_READY" });
+  migration.status = "rejected";
+  migration.updatedAt = new Date().toISOString();
+  await saveMigration(migration);
+  await addEvent({ id: randomUUID(), migrationId: migration.id, timestamp: new Date().toISOString(), level: "warning", message: "Changes rejected by user" });
+  return res.json(publicMigration(migration));
+});
+
 router.post("/migrations/:id/cancel", async (req, res) => {
   const migration = await getMigration(req.params.id);
   if (!migration) return res.status(404).json({ error: "MIGRATION_NOT_FOUND" });
   migration.status = "cancelled";
+  migration.cancelled = true;
   migration.updatedAt = new Date().toISOString();
   await saveMigration(migration);
   await addEvent({ id: randomUUID(), migrationId: migration.id, timestamp: new Date().toISOString(), level: "warning", message: "Migration cancelled by user" });

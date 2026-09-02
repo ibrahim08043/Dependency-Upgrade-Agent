@@ -10,7 +10,8 @@ export interface HealthStatus {
 }
 
 export interface RepositoryUploadInput {
-  file: string;
+  /** The ZIP archive of the repository to analyze. */
+  file: Blob;
 }
 
 export interface GithubRepositoryInput {
@@ -190,6 +191,139 @@ export type MigrationAgentState = {
   error?: string | null;
 } | null;
 
+export type MigrationResearchSourceStatus = typeof MigrationResearchSourceStatus[keyof typeof MigrationResearchSourceStatus];
+
+
+export const MigrationResearchSourceStatus = {
+  retrieved: 'retrieved',
+  unavailable: 'unavailable',
+} as const;
+
+export interface MigrationResearchSource {
+  id: string;
+  title: string;
+  url: string;
+  source_type: string;
+  retrieved_at: string;
+  status: MigrationResearchSourceStatus;
+  /** @nullable */
+  reason?: string | null;
+  key_findings: string[];
+  excerpt: string;
+}
+
+export interface MigrationFinding {
+  category: string;
+  title: string;
+  description: string;
+  /** @nullable */
+  sourceId?: string | null;
+  /** @nullable */
+  sourceUrl?: string | null;
+  evidence: string;
+  confident: boolean;
+}
+
+export type MigrationResearchConfidence = typeof MigrationResearchConfidence[keyof typeof MigrationResearchConfidence];
+
+
+export const MigrationResearchConfidence = {
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+  none: 'none',
+} as const;
+
+export interface MigrationResearch {
+  dependency: string;
+  currentVersion: string;
+  targetVersion: string;
+  sources: MigrationResearchSource[];
+  breakingChanges?: string[];
+  removedApis?: string[];
+  renamedApis?: string[];
+  changedApis?: string[];
+  configurationChanges?: string[];
+  importChanges?: string[];
+  compatibilityRequirements?: string[];
+  upgradeNotes?: string[];
+  findings?: MigrationFinding[];
+  confidence: MigrationResearchConfidence;
+}
+
+export interface ImpactFinding {
+  filePath: string;
+  line: number;
+  usageType: string;
+  symbol: string;
+  matchedCode: string;
+  reason: string;
+  confidence: string;
+  risk: string;
+}
+
+export interface RiskSummary {
+  affectedFiles: number;
+  affectedUsages: number;
+  high: number;
+  medium: number;
+  low: number;
+  affectedApis: string[];
+  affectedConfig: string[];
+  affectedTests: string[];
+  affectedBuildLint: string[];
+  findings?: ImpactFinding[];
+}
+
+export interface Attempt {
+  number: number;
+  result: string;
+  /** @nullable */
+  diagnosis: string | null;
+  filesChanged: number;
+  /** @nullable */
+  command?: string | null;
+  /** @nullable */
+  exitCode?: number | null;
+  /** @nullable */
+  stdout?: string | null;
+  /** @nullable */
+  stderr?: string | null;
+  filesInspected?: string[];
+  filesModified?: string[];
+  /** @nullable */
+  patch?: string | null;
+}
+
+export type VerificationCommandStatus = typeof VerificationCommandStatus[keyof typeof VerificationCommandStatus];
+
+
+export const VerificationCommandStatus = {
+  PASS: 'PASS',
+  FAIL: 'FAIL',
+  SKIPPED: 'SKIPPED',
+  TIMEOUT: 'TIMEOUT',
+} as const;
+
+export interface VerificationCommand {
+  command: string;
+  status: VerificationCommandStatus;
+  /** @nullable */
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+}
+
+export interface BaselineResult {
+  result: string;
+  tests: string;
+  build: string;
+  typecheck: string;
+  lint: string;
+  filesChanged: number;
+}
+
 export interface Migration {
   id: string;
   repositoryId: string;
@@ -216,6 +350,15 @@ export interface Migration {
      * @nullable
      */
   agentState?: MigrationAgentState;
+  /** @nullable */
+  research?: MigrationResearch | null;
+  /** @nullable */
+  riskSummary?: RiskSummary | null;
+  attempts?: Attempt[];
+  verificationCommands?: VerificationCommand[];
+  /** @nullable */
+  baseline?: BaselineResult | null;
+  cancelled?: boolean;
 }
 
 export type MigrationEventLevel = typeof MigrationEventLevel[keyof typeof MigrationEventLevel];
@@ -260,6 +403,15 @@ export interface MigrationDiff {
   files: DiffFile[];
 }
 
+export type MigrationReportApprovalStatus = typeof MigrationReportApprovalStatus[keyof typeof MigrationReportApprovalStatus];
+
+
+export const MigrationReportApprovalStatus = {
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  PENDING: 'PENDING',
+} as const;
+
 export interface RepositorySummary {
   name: string;
   language: string;
@@ -280,12 +432,29 @@ export interface ResearchSource {
   finding: string;
 }
 
-export interface Attempt {
-  number: number;
-  result: string;
-  /** @nullable */
-  diagnosis: string | null;
-  filesChanged: number;
+export type MigrationPlanResearchConfidence = typeof MigrationPlanResearchConfidence[keyof typeof MigrationPlanResearchConfidence];
+
+
+export const MigrationPlanResearchConfidence = {
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+  none: 'none',
+} as const;
+
+export interface MigrationPlan {
+  summary: string;
+  breakingChanges: string[];
+  plannedChanges: string[];
+  validationCommands: string[];
+  migrationFindings?: string[];
+  affectedApis?: string[];
+  riskAssessment?: string[];
+  plannedPackageChanges?: string[];
+  plannedSourceChanges?: string[];
+  plannedConfigChanges?: string[];
+  potentialFailurePoints?: string[];
+  researchConfidence?: MigrationPlanResearchConfidence;
 }
 
 export interface MigrationReport {
@@ -298,6 +467,17 @@ export interface MigrationReport {
   changes: string[];
   attempts: Attempt[];
   remainingIssues: string[];
+  /** @nullable */
+  research?: MigrationResearch | null;
+  /** @nullable */
+  riskSummary?: RiskSummary | null;
+  affectedApiFindings?: string[];
+  /** @nullable */
+  plan?: MigrationPlan | null;
+  verificationCommands?: VerificationCommand[];
+  /** @nullable */
+  baseline?: BaselineResult | null;
+  approvalStatus?: MigrationReportApprovalStatus;
 }
 
 export interface DashboardSummary {

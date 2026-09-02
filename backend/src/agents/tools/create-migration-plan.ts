@@ -11,6 +11,14 @@ interface CreatePlanInput {
   affected_files: string[];
   planned_changes: string[];
   verification_commands: string[];
+  migration_findings?: string[];
+  affected_apis?: string[];
+  risk_assessment?: string[];
+  planned_package_changes?: string[];
+  planned_source_changes?: string[];
+  planned_config_changes?: string[];
+  potential_failure_points?: string[];
+  research_confidence?: "high" | "medium" | "low" | "none";
 }
 
 /**
@@ -34,6 +42,14 @@ export default createTool<CreatePlanInput>({
       affected_files: { type: "array", items: { type: "string" } },
       planned_changes: { type: "array", items: { type: "string" } },
       verification_commands: { type: "array", items: { type: "string" } },
+      migration_findings: { type: "array", items: { type: "string" }, description: "Key research findings that drive this plan." },
+      affected_apis: { type: "array", items: { type: "string" }, description: "APIs the repository uses that are affected." },
+      risk_assessment: { type: "array", items: { type: "string" }, description: "Which usages are at risk and why." },
+      planned_package_changes: { type: "array", items: { type: "string" } },
+      planned_source_changes: { type: "array", items: { type: "string" } },
+      planned_config_changes: { type: "array", items: { type: "string" } },
+      potential_failure_points: { type: "array", items: { type: "string" } },
+      research_confidence: { type: "string", enum: ["high", "medium", "low", "none"] },
     },
     required: ["dependency", "from_version", "target_version", "planned_changes", "verification_commands"],
   },
@@ -51,6 +67,14 @@ export default createTool<CreatePlanInput>({
       affectedFiles: input.affected_files ?? [],
       plannedChanges: input.planned_changes ?? [],
       verificationCommands: input.verification_commands ?? [],
+      migrationFindings: input.migration_findings ?? [],
+      affectedApis: input.affected_apis ?? [],
+      riskAssessment: input.risk_assessment ?? [],
+      plannedPackageChanges: input.planned_package_changes ?? [],
+      plannedSourceChanges: input.planned_source_changes ?? [],
+      plannedConfigChanges: input.planned_config_changes ?? [],
+      potentialFailurePoints: input.potential_failure_points ?? [],
+      researchConfidence: input.research_confidence,
     };
     ctx.log(`Generated migration plan for ${input.dependency}`);
     return { ok: true, result: { accepted: true, __plan: plan } };

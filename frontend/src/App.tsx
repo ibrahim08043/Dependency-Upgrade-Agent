@@ -3,9 +3,9 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import { Link, Route, Switch, useLocation, useParams } from 'wouter';
 import {
   ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronRight, CircleDot,
-  Code2, FileCode2, FolderGit2, GitBranch, Layers3, Loader2,
+  Code2, FileArchive, FileCode2, FolderGit2, GitBranch, Layers3, Loader2,
   Menu, PanelLeftClose, PanelLeftOpen, Play, RefreshCw, ScrollText, ShieldCheck, Terminal,
-  XCircle, Zap,
+  Trash2, Upload, XCircle, Zap,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -14,7 +14,7 @@ import {
   getListMigrationsQueryKey, useApproveMigration, useCancelMigration,
   useCreateMigration, useGetDashboard, useGetMigration, useGetMigrationDiff,
   useGetMigrationEvents, useGetMigrationReport, useGetRepository, useImportGithubRepository,
-  useListMigrations, useRejectMigration,
+  useListMigrations, useRejectMigration, useUploadRepository,
   type Migration, type MigrationAgentState, type MigrationEvent, type MigrationReport, type MigrationResearch,
   type RiskSummary, type Repository, type ImpactFinding, type Attempt,
 } from '@dua/api-client-react';
@@ -41,6 +41,15 @@ function StatusPill({ status }: { status?: string }) {
 }
 
 const SIDEBAR_STORAGE_KEY = 'dua.sidebar.collapsed';
+
+/** Max ZIP upload size (compressed). Mirrors the backend DUA_MAX_UPLOAD_BYTES default. */
+const MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
 
 function readCollapsedPreference(): boolean {
   try {
@@ -155,8 +164,135 @@ function MigrationTable({ rows }: { rows: Migration[] }) {
   return <div className="table-wrap"><table><thead><tr><th>Repository</th><th>Dependency</th><th>Upgrade</th><th>Status</th><th>Updated</th><th /></tr></thead><tbody>{rows.map((migration) => <tr className="migration-row" key={migration.id} data-testid={`row-migration-${migration.id}`}><td><Link href={`/migration/${migration.id}`} className="repo-name" data-testid={`link-migration-${migration.id}`}><span>{migration.repositoryName}</span><small>run {migration.id.slice(0, 8)}</small></Link></td><td><span className="dependency">{migration.dependency}</span><small style={{ display: 'block', color: 'hsl(var(--muted-foreground))', marginTop: 3 }}>{migration.mode} mode</small></td><td><span className="version">{migration.oldVersion}<span className="arrow">→</span>{migration.targetVersion}</span></td><td><StatusPill status={migration.status} /></td><td style={{ color: 'hsl(var(--muted-foreground))', whiteSpace: 'nowrap' }}>{formatDate(migration.updatedAt)}</td><td><Link href={`/migration/${migration.id}`} className="btn btn-quiet" aria-label={`Open migration ${migration.id}`} data-testid={`button-open-migration-${migration.id}`}><ArrowRight /></Link></td></tr>)}</tbody></table></div>;
 }
 
+/**
+ * Safe client-side selection of a ZIP file. Rejects anything that isn't a .zip
+ * and anything larger than the configurable limit before it reaches the network.
+ */
+function selectZipFile(file: File): string | null {
+  if (!file.name.toLowerCase().endsWith('.zip')) {
+    return 'Only .zip archives are supported. Please choose a ZIP file.';
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return `This file is ${formatBytes(file.size)}, which exceeds the ${formatBytes(MAX_UPLOAD_BYTES)} upload limit.`;
+  }
+  return null;
+}
+
+/** Pull a server-provided error message (e.g. "ZIP_PATH_TRAVERSAL: …") from a mutation error. */
+function extractUploadError(error: unknown): string {
+  const data =
+    typeof error === 'object' && error !== null && 'data' in error
+      ? (error as { data: unknown }).data
+      : null;
+  if (typeof data === 'object' && data !== null && 'error' in data) {
+    const message = (data as { error: unknown }).error;
+    if (typeof message === 'string' && message.trim()) return message;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return 'The archive could not be uploaded.';
+}
+
+function ZipUploadPane({ onRepo }: { onRepo: (repo: Repository) => void }) {
+  const upload = useUploadRepository();
+  const [dragging, setDragging] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const submit = (next: File) => {
+    const validation = selectZipFile(next);
+    if (validation) {
+      setLocalError(validation);
+      return;
+    }
+    setFile(next);
+    // The generated client builds the multipart FormData from this object:
+    //   formData.append('file', repositoryUploadInput.file)
+    upload.mutate({ data: { file: next } }, {
+      onSuccess: (repository) => onRepo(repository),
+    });
+  };
+
+  const onDrop = (event: React.DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    setDragging(false);
+    const dropped = event.dataTransfer.files?.[0];
+    if (dropped) submit(dropped);
+  };
+
+  const pick = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const chosen = event.target.files?.[0];
+    if (chosen) submit(chosen);
+  };
+
+  const clear = () => {
+    setFile(null);
+    setLocalError(null);
+    upload.reset();
+  };
+
+  const uploadError = upload.isError
+    ? extractUploadError(upload.error)
+    : null;
+
+  return (
+    <div>
+      {!file && !upload.isPending ? (
+        <div
+          className={`dropzone ${dragging ? 'dragging' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          onClick={() => document.getElementById('zip-file')?.click()}
+          data-testid="zip-dropzone"
+        >
+          <div className="upload-icon"><Upload /></div>
+          <strong>Drop a repository ZIP here</strong>
+          <span>or click to browse · .zip only · up to {formatBytes(MAX_UPLOAD_BYTES)}</span>
+          <input
+            id="zip-file"
+            type="file"
+            accept=".zip,application/zip,application/x-zip-compressed"
+            onChange={pick}
+            style={{ display: 'none' }}
+            data-testid="input-zip-file"
+          />
+          <span className="btn btn-secondary" style={{ marginTop: 12, pointerEvents: 'none', display: 'inline-flex' }}>
+            <FileArchive /> Choose ZIP
+          </span>
+        </div>
+      ) : null}
+
+      {upload.isPending ? (
+        <div className="file-chip" style={{ justifyContent: 'center', padding: '22px' }} data-testid="state-uploading">
+          <Loader2 className="animate-spin" /> Uploading <strong>{file?.name}</strong> and analyzing…
+        </div>
+      ) : null}
+
+      {!upload.isPending && file ? (
+        <div className="file-chip" data-testid="file-chip-selected">
+          <FileArchive />
+          <strong>{file.name}</strong>
+          <span>{formatBytes(file.size)}</span>
+          <button onClick={clear} aria-label="Remove selected ZIP" data-testid="button-remove-zip"><Trash2 /></button>
+        </div>
+      ) : null}
+
+      {upload.isSuccess && file ? (
+        <div className="repo-banner" style={{ marginTop: 12 }} data-testid="state-upload-success">
+          <div className="repo-symbol"><FolderGit2 size={17} /></div>
+          <div><strong>Upload ready</strong><span>{file.name} was extracted and analysed.</span></div>
+        </div>
+      ) : null}
+
+      {localError ? <div className="error-box" style={{ marginTop: 15 }} data-testid="state-zip-validation"><strong>Invalid file</strong><p>{localError}</p><button className="btn btn-danger" onClick={clear} data-testid="button-dismiss-import-error"><RefreshCw /> Choose another file</button></div> : null}
+      {uploadError ? <div className="error-box" style={{ marginTop: 15 }} data-testid="state-upload-error"><strong>Upload failed</strong><p>{uploadError}</p><button className="btn btn-danger" onClick={clear} data-testid="button-retry-upload"><RefreshCw /> Try again</button></div> : null}
+    </div>
+  );
+}
+
 function NewMigration() {
   const [, setLocation] = useLocation();
+  const [source, setSource] = useState<'github' | 'zip'>('github');
   const [url, setUrl] = useState('');
   const [repo, setRepo] = useState<Repository | null>(null);
   const [dependency, setDependency] = useState('');
@@ -176,19 +312,28 @@ function NewMigration() {
     if (!repo || !dependency || !targetMajor) return;
     create.mutate({ data: { repositoryId: repo.id, dependency, targetMajor, mode } }, { onSuccess: (migration) => { setLocation(`/migration/${migration.id}`); } });
   };
+  const resetRepo = () => { setRepo(null); };
+
   return (
     <div className="page"><div className="form-layout">
       <div className="page-head"><div><div className="eyebrow">New migration / intake</div><h1>Bring a repository in.</h1><p className="subhead">The agent starts with a read-only analysis. Choose the dependency and target major once the repository is indexed.</p></div></div>
       <section className="card import-card">
-        <div className="url-field">
-          <label htmlFor="github-url">GitHub repository URL</label>
-          <input id="github-url" className="input" placeholder="https://github.com/owner/repository" value={url} onChange={(event) => setUrl(event.target.value)} data-testid="input-github-url" />
-          <span className="helper">Public GitHub repositories are cloned for analysis; no changes are pushed.</span>
-          <button className="btn btn-primary" style={{ marginTop: 8, alignSelf: 'flex-start' }} onClick={analyzeGithub} disabled={!url.trim() || isImporting} data-testid="button-analyze-github">{isImporting ? <Loader2 className="animate-spin" /> : <GitBranch />} Analyze repository</button>
-        </div>
-        {github.isError ? <div className="error-box" style={{ marginTop: 15 }} data-testid="state-import-error"><strong>Repository analysis failed</strong><p>Check the source and try again. The server returned an analysis error.</p><button className="btn btn-danger" onClick={analyzeGithub} data-testid="button-retry-import"><RefreshCw /> Retry analysis</button></div> : null}
+        {!repo ? <div className="source-tabs">
+          <button className={`source-tab ${source === 'github' ? 'active' : ''}`} onClick={() => setSource('github')} data-testid="tab-github"><GitBranch /> GitHub URL</button>
+          <button className={`source-tab ${source === 'zip' ? 'active' : ''}`} onClick={() => setSource('zip')} data-testid="tab-zip"><FileArchive /> Upload ZIP</button>
+        </div> : null}
+        {!repo && source === 'github' ? (
+          <div className="url-field">
+            <label htmlFor="github-url">GitHub repository URL</label>
+            <input id="github-url" className="input" placeholder="https://github.com/owner/repository" value={url} onChange={(event) => setUrl(event.target.value)} data-testid="input-github-url" />
+            <span className="helper">Public GitHub repositories are cloned for analysis; no changes are pushed.</span>
+            <button className="btn btn-primary" style={{ marginTop: 8, alignSelf: 'flex-start' }} onClick={analyzeGithub} disabled={!url.trim() || isImporting} data-testid="button-analyze-github">{isImporting ? <Loader2 className="animate-spin" /> : <GitBranch />} Analyze repository</button>
+            {github.isError ? <div className="error-box" style={{ marginTop: 15 }} data-testid="state-import-error"><strong>Repository analysis failed</strong><p>Check the source and try again. The server returned an analysis error.</p><button className="btn btn-danger" onClick={analyzeGithub} data-testid="button-retry-import"><RefreshCw /> Retry analysis</button></div> : null}
+          </div>
+        ) : null}
+        {!repo && source === 'zip' ? <ZipUploadPane onRepo={(next) => { setRepo(next); setDependency(next.dependencies[0]?.name ?? ''); setTargetMajor(next.dependencies[0]?.version.match(/\d+/)?.[0] ?? ''); }} /> : null}
         {repo ? <RepositoryDetails repo={repositoryQuery.data ?? repo} dependency={dependency} setDependency={setDependency} targetMajor={targetMajor} setTargetMajor={setTargetMajor} mode={mode} setMode={setMode} /> : null}
-        {repo ? <div className="form-actions"><button className="btn btn-quiet" onClick={() => { setRepo(null); }} data-testid="button-reset-repository">Choose another</button><button className="btn btn-primary" onClick={beginMigration} disabled={!isReady || create.isPending} data-testid="button-create-migration">{create.isPending ? <Loader2 className="animate-spin" /> : <Play />} Start migration <ArrowRight /></button></div> : null}
+        {repo ? <div className="form-actions"><button className="btn btn-quiet" onClick={resetRepo} data-testid="button-reset-repository">Choose another</button><button className="btn btn-primary" onClick={beginMigration} disabled={!isReady || create.isPending} data-testid="button-create-migration">{create.isPending ? <Loader2 className="animate-spin" /> : <Play />} Start migration <ArrowRight /></button></div> : null}
         {create.isError ? <div className="error-box" style={{ marginTop: 15 }} data-testid="state-create-error"><strong>Migration could not start</strong><p>The repository remains indexed. Review the target and retry.</p><button className="btn btn-danger" onClick={beginMigration} data-testid="button-retry-create">Try again</button></div> : null}
       </section>
     </div></div>
@@ -260,7 +405,7 @@ function ConfChip({ confidence }: { confidence?: string }) {
   return <span className={`conf-chip ${tone}`}>{confidence ?? 'none'}</span>;
 }
 
-function ResearchGroup({ label, items, tone }: { label: string; items: string[]; tone?: 'break' }) {
+function ResearchGroup({ label, items, tone }: { label: string; items?: string[]; tone?: 'break' }) {
   if (!items || items.length === 0) return null;
   return <div className="research-group"><h4>{label}</h4><div className="research-tags">{items.map((item, i) => <span className={`research-tag ${tone ?? ''}`} key={`${label}-${i}`}>{item}</span>)}</div></div>;
 }

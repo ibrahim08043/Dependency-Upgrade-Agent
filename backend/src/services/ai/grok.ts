@@ -92,7 +92,8 @@ export class XaiGrokProvider implements GrokProvider {
       body: JSON.stringify(body),
     });
     if (!response.ok) {
-      throw new GrokApiError(`GROK_API_ERROR: xAI returned ${response.status} ${response.statusText}`);
+      const errBody = await response.text().catch(() => "");
+      throw new GrokApiError(`GROK_API_ERROR: xAI returned ${response.status} ${response.statusText} — ${errBody.slice(0, 500)}`);
     }
     let payload: { choices?: XaiChoice[] };
     try {

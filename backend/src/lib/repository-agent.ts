@@ -6,12 +6,7 @@ import { runCommand } from "./run-command";
 import { captureDiff } from "./git";
 import { getGrokProvider } from "../services/ai/provider";
 import { runCodingAgent } from "../agents/coding-agent";
-import {
-  copyDirectory,
-  createWorkspaceRoot,
-  extractArchive,
-  listZipEntries,
-} from "./workspace";
+import { extractZipToWorkspace } from "./zip";
 import {
   addEvent,
   createMigration,
@@ -23,11 +18,47 @@ import {
   type RepositoryRecord,
 } from "./migration-state";
 import type { GrokProvider } from "../services/ai/types";
+import { researchDependency as fetchResearch, ResearchError } from "./research";
+import { scanRepositoryUsage } from "./impact";
+import { applyRiskToFindings } from "./risk";
+import { synthesizeFindings, fallbackFindingsFromSources } from "./synthesis";
+import { diagnoseFailure, HealError } from "./heal";
+import {
+  validateDependency,
+  validateTargetVersion,
+  validatePackageManager,
+  DependencyValidationError,
+} from "./dependency-validation";
+import {
+  verifyInstalledVersion,
+  snapshotLockfiles,
+  validateLockfileUpdated,
+} from "./install-verification";
 
 /** Test-only seam: allows a scripted provider to be injected. */
 let __migAgentProvider: GrokProvider | null = null;
 export function setMigrationAgentProviderOverride(provider: GrokProvider | null): void {
   __migAgentProvider = provider;
+}
+
+/**
+ * Resolve the Grok provider for the coding/repair agent WITHOUT throwing when
+ * unconfigured. Returns the injected scripted provider (tests), the live provider
+ * when XAI_API_KEY is set, else null.
+ */
+function getGrokProviderOrNull(): GrokProvider | null {
+  if (__migAgentProvider) return __migAgentProvider;
+  if (process.env.XAI_API_KEY) return getGrokProvider();
+  return null;
+}
+
+/**
+ * Resolve ONLY the live Grok provider (ignoring the test seam). Used for research
+ * synthesis so a scripted test provider drives only the coding agent deterministically.
+ */
+function getLiveGrokProviderOrNull(): GrokProvider | null {
+  if (process.env.XAI_API_KEY) return getGrokProvider();
+  return null;
 }
 
 type PackageJson = {
@@ -39,25 +70,62 @@ type PackageJson = {
   optionalDependencies?: Record<string, string>;
 };
 
+/**
+ * Find the repository root: the directory containing the project's manifest
+ * (`package.json`). Handles both a flat archive (`package.json` at the root) and
+ * a nested wrapper (`my-project/package.json`). Searches a bounded depth and
+ * scores candidates so a monorepo root is picked over an unrelated nested
+ * package (the candidate carrying the most dependency entries wins).
+ *
+ * We deliberately DO NOT assume the first directory is the root.
+ */
+const MANIFEST_ROOT_MAX_DEPTH = 3;
+
 async function findPackageRoot(rootPath: string): Promise<string | null> {
-  const direct = path.join(rootPath, "package.json");
-  try {
-    await stat(direct);
-    return rootPath;
-  } catch {
-    const entries = await readdir(rootPath, { withFileTypes: true });
-    for (const entry of entries.slice(0, 30)) {
-      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
-      const candidate = path.join(rootPath, entry.name, "package.json");
-      try {
-        await stat(candidate);
-        return path.dirname(candidate);
-      } catch {
-        // Continue looking only one wrapper directory deep.
-      }
+  interface Candidate { dir: string; depth: number; depCount: number }
+  const candidates: Candidate[] = [];
+
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > MANIFEST_ROOT_MAX_DEPTH) return;
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
     }
-    return null;
+    // package.json present here?
+    const manifest = path.join(dir, "package.json");
+    try {
+      const raw = await readFile(manifest, "utf8");
+      let depCount = 0;
+      try {
+        const parsed = JSON.parse(raw) as { dependencies?: unknown; devDependencies?: unknown };
+        depCount =
+          (typeof parsed.dependencies === "object" && parsed.dependencies ? Object.keys(parsed.dependencies).length : 0) +
+          (typeof parsed.devDependencies === "object" && parsed.devDependencies ? Object.keys(parsed.devDependencies).length : 0);
+      } catch {
+        depCount = 0;
+      }
+      candidates.push({ dir, depth, depCount });
+    } catch {
+      // no manifest at this level
+    }
+    // Recurse into directories (skip hidden/node_modules) to a bounded depth.
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      if (["node_modules", ".git", "dist", "build"].includes(entry.name)) continue;
+      await walk(path.join(dir, entry.name), depth + 1);
+    }
   }
+
+  await walk(rootPath, 0);
+  if (candidates.length === 0) return null;
+
+  // Prefer the shallowest directory with the most dependency entries
+  // (ties broken by depth). This prefers a real project root over an empty
+  // boilerplate nested package.
+  candidates.sort((a, b) => b.depCount - a.depCount || a.depth - b.depth || a.dir.localeCompare(b.dir));
+  return candidates[0].dir;
 }
 
 /** Recursively list files as POSIX-style relative paths (forward slashes). */
@@ -141,26 +209,10 @@ export async function createRepositoryWorkspace(
   filename: string,
 ): Promise<{ rootPath: string; originalPath: string }> {
   // Each job gets an isolated temp directory: <temp>/dependency-agent/<uuid>
-  const jobRoot = await createWorkspaceRoot("repo-");
-  const archivePath = path.join(jobRoot, "repository.zip");
-  const originalPath = path.join(jobRoot, "original");
-  const workPath = path.join(jobRoot, "workspace");
-  await mkdir(originalPath, { recursive: true });
-  await mkdir(workPath, { recursive: true });
-  const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "-").slice(-120) || "repository.zip";
-  const archive = path.join(jobRoot, safeFilename.endsWith(".zip") ? safeFilename : "repository.zip");
-  await writeFile(archive, bytes);
-
-  // Validate the ZIP before extracting to prevent path traversal.
-  const names = await listZipEntries(archive);
-  if (names === null) throw new Error("REPOSITORY_INVALID: ZIP file could not be inspected");
-  if (names.length > 20_000) throw new Error("REPOSITORY_INVALID: ZIP contains too many files");
-  const unsafe = names.some((name) => path.posix.isAbsolute(name) || name.split("/").includes(".."));
-  if (unsafe) throw new Error("REPOSITORY_INVALID: ZIP contains unsafe paths");
-
-  await extractArchive(archive, originalPath);
-  await copyDirectory(originalPath, workPath);
-  return { rootPath: workPath, originalPath };
+  // The secure ZIP path validates (size, entries, uncompressed sizes, traversal)
+  // BEFORE extraction and removes the partial job root on any failure.
+  const job = await extractZipToWorkspace(bytes, filename);
+  return { rootPath: job.rootPath, originalPath: job.originalPath };
 }
 
 export async function importGithubWorkspace(url: string): Promise<{ rootPath: string; originalPath: string }> {
@@ -189,79 +241,92 @@ export async function importGithubWorkspace(url: string): Promise<{ rootPath: st
   return createRepositoryWorkspace(Buffer.from(await response.arrayBuffer()), `${repo}.zip`);
 }
 
-async function searchImpact(rootPath: string, dependency: string): Promise<{ files: string[]; usages: number }> {
-  const files = await listFiles(rootPath);
-  const codeFiles = files.filter((file) => /\.(tsx?|jsx?|mjs|cjs)$/.test(file));
-  const matcher = new RegExp(`(?:from\\s+["']${escapeRegExp(dependency)}["']|require\\(\\s*["']${escapeRegExp(dependency)}["']|\\b${escapeRegExp(dependency.split("/").pop() ?? dependency)}\\b)`, "g");
-  const impacted: string[] = [];
-  let usages = 0;
-  for (const file of codeFiles) {
-    const content = await readFile(path.join(rootPath, file), "utf8").catch(() => "");
-    const matches = content.match(matcher);
-    if (matches?.length) {
-      impacted.push(file);
-      usages += matches.length;
-    }
-  }
-  return { files: impacted, usages };
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-async function researchDependency(dependency: string, targetMajor: string): Promise<{
-  sources: Array<{ title: string; url: string; finding: string }>;
-  latest: string;
-}> {
-  const url = `https://registry.npmjs.org/${encodeURIComponent(dependency)}`;
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`RESEARCH_ERROR: npm registry returned ${response.status}`);
-  const metadata = (await response.json()) as {
-    "dist-tags"?: { latest?: string };
-    versions?: Record<string, { description?: string; deprecated?: string }>;
-  };
-  const latest = metadata["dist-tags"]?.latest ?? `${targetMajor}.0.0`;
-  const targetVersion = Object.keys(metadata.versions ?? {})
-    .filter((version) => version.split(".")[0].replace(/\D/g, "") === targetMajor)
-    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0] ?? latest;
-  return {
-    latest: targetVersion,
-    sources: [{
-      title: `${dependency} npm registry metadata`,
-      url,
-      finding: `Registry metadata was fetched successfully. The highest discovered ${targetMajor}.x version is ${targetVersion}; latest published version is ${latest}. Review the package's official migration guide before approving.`
-    }],
-  };
-}
-
-async function verifyMigration(migration: MigrationRecord, rootPath: string, repository: RepositoryRecord) {
-  const scripts = new Set(repository.scripts);
+/**
+ * Run the repository verification pipeline (test/build/typecheck/lint) against real
+ * scripts. Only scripts actually present in the repository are executed; missing ones
+ * are SKIPPED. Records a rich per-command record and marks TIMEOUT when the process is
+ * killed. Returns the failed commands so the self-healing loop can act on them.
+ */
+async function verifyMigration(
+  migration: MigrationRecord,
+  rootPath: string,
+  repository: RepositoryRecord,
+): Promise<Array<{ command: string; exitCode: number; stdout: string; stderr: string }>> {
   const manager = repository.packageManager === "npm" ? "npm" : repository.packageManager === "pnpm" ? "pnpm" : null;
+  const failed: Array<{ command: string; exitCode: number; stdout: string; stderr: string }> = [];
   if (!manager) {
     migration.tests = "skipped";
     migration.build = "skipped";
     migration.typecheck = "skipped";
     migration.lint = "skipped";
-    return;
+    addEvent({ id: randomUUID(), migrationId: migration.id, timestamp: new Date().toISOString(), level: "warning", message: "Verification skipped — unsupported package manager" }).catch(() => undefined);
+    return failed;
   }
-  const runScript = async (script: string): Promise<"pass" | "fail" | "skipped"> => {
-    if (!scripts.has(script)) return "skipped";
+  migration.verificationCommands = migration.verificationCommands ?? [];
+
+  const runScript = async (script: string): Promise<"pass" | "fail" | "skipped" | "timeout"> => {
+    if (!repository.scripts.includes(script)) {
+      migration.verificationCommands!.push({
+        command: `${manager} run ${script}`,
+        status: "SKIPPED",
+        exitCode: null,
+        stdout: "",
+        stderr: "SKIPPED — no script found",
+        durationMs: 0,
+      });
+      await addEvent({
+        id: randomUUID(),
+        migrationId: migration.id,
+        timestamp: new Date().toISOString(),
+        level: "warning",
+        message: `${script}: SKIPPED — no ${script} script found`,
+      }).catch(() => undefined);
+      return "skipped";
+    }
+    const scriptStart = Date.now();
+    logger.info({ migrationId: migration.id, manager, script, cwd: rootPath }, `[VERIFY] Running ${manager} run ${script}`);
     const result = await runCommand(manager, ["run", script], { cwd: rootPath });
+    const scriptDuration = Date.now() - scriptStart;
+    const isTimeout = result.code === 124;
+    const status = result.code === 0 ? "PASS" : isTimeout ? "TIMEOUT" : "FAIL";
+    migration.verificationCommands!.push({
+      command: `${manager} run ${script}`,
+      status,
+      exitCode: result.code,
+      stdout: result.stdout.slice(0, 4000),
+      stderr: result.stderr.slice(0, 4000),
+      durationMs: result.durationMs || scriptDuration,
+    });
+    logger.info(
+      { migrationId: migration.id, script, code: result.code, status, durationMs: result.durationMs || scriptDuration, stderr: result.stderr.slice(0, 500) },
+      `[VERIFY] ${manager} run ${script} → ${status}`,
+    );
     await addEvent({
       id: randomUUID(),
       migrationId: migration.id,
       timestamp: new Date().toISOString(),
       level: result.code === 0 ? "success" : "error",
-      message: `${manager} run ${script} ${result.code === 0 ? "passed" : "failed"} (${result.durationMs}ms)`,
-    });
-    if (result.code !== 0) migration.remainingIssues.push(`${script}: ${result.stderr || result.stdout}`.slice(0, 1000));
-    return result.code === 0 ? "pass" : "fail";
+      message: `${manager} run ${script} ${result.code === 0 ? "passed" : isTimeout ? "timed out" : "failed"} (${result.durationMs}ms)`,
+    }).catch(() => undefined);
+    if (result.code !== 0) {
+      const issue = `${script}: ${(result.stderr || result.stdout).slice(0, 1000)}`;
+      if (!migration.remainingIssues.includes(issue)) migration.remainingIssues.push(issue);
+      failed.push({ command: `${manager} run ${script}`, exitCode: result.code, stdout: result.stdout.slice(0, 2000), stderr: result.stderr.slice(0, 2000) });
+    }
+    return result.code === 0 ? "pass" : isTimeout ? "timeout" : "fail";
   };
-  migration.tests = await runScript("test");
-  migration.build = await runScript("build");
-  migration.typecheck = await runScript("typecheck");
-  migration.lint = await runScript("lint");
+
+  const norm = (s: "pass" | "fail" | "skipped" | "timeout"): "pass" | "fail" | "skipped" => (s === "timeout" ? "fail" : s);
+  migration.tests = norm(await runScript("test"));
+  migration.build = norm(await runScript("build"));
+  migration.typecheck = norm(await runScript("typecheck"));
+  migration.lint = norm(await runScript("lint"));
+  return failed;
+}
+
+/** True when the verification result is a pass (no FAIL, TIMEOUT treated as fail). */
+function verificationPassed(migration: MigrationRecord): boolean {
+  return migration.tests !== "fail" && migration.build !== "fail" && migration.typecheck !== "fail" && migration.lint !== "fail";
 }
 
 export async function runMigration(migrationId: string): Promise<void> {
@@ -283,20 +348,103 @@ export async function runMigration(migrationId: string): Promise<void> {
 
   try {
     migration.status = "running";
+    logger.info({ migrationId, cwd: repository.rootPath }, "[MIGRATION] Starting migration");
     await update("research", "Starting migration research");
 
-    // 1) Impact search
-    const impact = await searchImpact(repository.rootPath, migration.dependency);
-    migration.impactFiles = impact.files;
-    migration.affectedFiles = impact.files.length;
-    migration.affectedUsages = impact.usages;
-    await update("impact-analysis", `Found ${impact.usages} potentially affected usages in ${impact.files.length} files`, "success");
+    // ---- Phase 2: REAL migration research (documentation retrieval + synthesis) ----
+    await update("research", "Starting migration research");
+    await addEvent({ id: randomUUID(), migrationId, timestamp: new Date().toISOString(), level: "info", message: "Searching official documentation" });
 
-    // 2) Registry research (resolves the exact target release)
-    const research = await researchDependency(migration.dependency, migration.targetVersion);
-    migration.sources = research.sources;
-    migration.targetVersion = research.latest;
-    await update("research", `Fetched npm registry metadata for ${migration.dependency}`, "success");
+    let research: import("./research-types").MigrationResearch;
+    const currentMajor = (migration.oldVersion.match(/\d+/) ?? ["0"])[0];
+    const targetMajor = migration.targetVersion.split(".")[0];
+    try {
+      research = await fetchResearch(migration.dependency, currentMajor, targetMajor);
+      migration.targetVersion = research.sources.find((s) => s.status === "retrieved" && s.source_type === "npm_metadata")
+        ? (research.targetVersion || migration.targetVersion)
+        : migration.targetVersion;
+    } catch (error) {
+      // Preserve the original queued/npm-sourced targetVersion as a best-effort
+      // value, but surface that reliable research could not be established.
+      research = {
+        dependency: migration.dependency,
+        currentVersion: migration.oldVersion,
+        targetVersion: migration.targetVersion,
+        sources: [],
+        breakingChanges: [],
+        removedApis: [], renamedApis: [], changedApis: [], configurationChanges: [],
+        importChanges: [], compatibilityRequirements: [], upgradeNotes: [],
+        findings: [], confidence: "none",
+      };
+      migration.remainingIssues.push(
+        `RESEARCH_FAILED: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    migration.research = research;
+    migration.sources = research.sources.map((s) => ({ title: s.title, url: s.url, finding: s.key_findings.join("; ") || s.excerpt.slice(0, 200) }));
+
+    const retrievedCount = research.sources.filter((s) => s.status === "retrieved").length;
+    const unavailableCount = research.sources.filter((s) => s.status === "unavailable").length;
+    await update("research", `Fetched ${retrievedCount} documentation source(s)${unavailableCount ? ` (${unavailableCount} unavailable)` : ""}`, retrievedCount > 0 ? "success" : "warning");
+
+    // Grok research synthesis (uses only retrieved sources).
+    const retrieved = research.sources.filter((s) => s.status === "retrieved").map((s) => ({
+      title: s.title, url: s.url, source_type: s.source_type, excerpt: s.excerpt,
+    }));
+    let synthesized: import("./research-types").MigrationFindings;
+    try {
+      const provider = getLiveGrokProviderOrNull();
+      synthesized = provider
+        ? await synthesizeFindings(provider, {
+            dependency: migration.dependency,
+            currentVersion: migration.oldVersion,
+            targetVersion: migration.targetVersion,
+            researchContext: retrieved,
+            repoContext: {
+              language: repository.language,
+              packageManager: repository.packageManager,
+              packageJson: await readFile(path.join(repository.rootPath, "package.json"), "utf8").catch(() => "{}"),
+              fileTree: (await listFiles(repository.rootPath)).slice(0, 200).join("\n"),
+              affectedUsage: [],
+            },
+          })
+        : fallbackFindingsFromSources(retrieved);
+      await update("research", "Research synthesis completed", "success");
+    } catch (error) {
+      synthesized = fallbackFindingsFromSources(retrieved);
+      migration.remainingIssues.push(`RESEARCH_SYNTHESIS_FAILED: ${error instanceof Error ? error.message : String(error)}`);
+      await update("research", "Research synthesis degraded to retrieved-source summary", "warning");
+    }
+    research.breakingChanges = synthesized.breakingChanges;
+    research.removedApis = synthesized.removedApis;
+    research.renamedApis = synthesized.renamedApis;
+    research.changedApis = synthesized.changedApis;
+    research.configurationChanges = synthesized.configurationChanges;
+    research.importChanges = synthesized.importChanges;
+    research.compatibilityRequirements = synthesized.compatibilityRequirements;
+    research.upgradeNotes = synthesized.upgradeNotes;
+    research.findings = synthesized.findings;
+    if (synthesized.confidence === "high" || synthesized.confidence === "medium" || synthesized.confidence === "low") {
+      research.confidence = synthesized.confidence;
+    }
+    migration.research = research;
+    if (research.confidence === "none") {
+      migration.remainingIssues.push("Reliable migration information could not be established.");
+      await update("research", "Reliable migration information could not be established", "warning");
+    }
+
+    // ---- Phase 2: repository-aware impact analysis + research correlation ----
+    await update("impact-analysis", "Starting impact analysis");
+    await addEvent({ id: randomUUID(), migrationId, timestamp: new Date().toISOString(), level: "info", message: "Scanning repository for dependency usage" });
+
+    const scan = await scanRepositoryUsage(repository.rootPath, migration.dependency);
+    const riskResult = applyRiskToFindings({ findings: scan.codeFindings, research });
+    migration.impactFiles = riskResult.summary.affectedApis.length > 0 ? [...new Set(scan.impactedFiles)] : scan.impactedFiles;
+    migration.affectedFiles = riskResult.summary.affectedFiles;
+    migration.affectedUsages = riskResult.summary.affectedUsages;
+    migration.riskSummary = riskResult.summary;
+    await update("impact-analysis", `Found ${riskResult.summary.affectedUsages} dependency usages across ${riskResult.summary.affectedFiles} files`, "success");
+    await update("impact-analysis", `Impact classified: ${riskResult.summary.high} high, ${riskResult.summary.medium} medium, ${riskResult.summary.low} low risk`, "success");
 
     // 3) Git baseline: snapshot the pristine workspace so diffs are real.
     const manager = repository.packageManager === "npm" ? "npm" : repository.packageManager === "pnpm" ? "pnpm" : null;
@@ -309,54 +457,152 @@ export async function runMigration(migrationId: string): Promise<void> {
     // Excludes are still resolved from the gitignore files; write a workspace-scoped one.
     await writeFile(
       path.join(repository.rootPath, ".agent-gitignore"),
-      ".agent-backups/\n.agent-patch.tmp\n",
+      ".agent-backups/\n.agent-patch.tmp\nnode_modules/\ndist/\nbuild/\n",
       "utf8",
     );
     await runCommand("git", ["add", "-A"], { cwd: repository.rootPath });
     await runCommand("git", ["commit", "-q", "-m", "baseline"], { cwd: repository.rootPath });
 
-    // 4) Update the dependency in the manifest via the detected package manager.
+    // 4) Dependency install: real package manager execution with verification.
+    // Capture lockfile state before installation for verification.
+    const lockfileBefore = await snapshotLockfiles(repository.rootPath, manager);
+
     await update("migration", "Updating the dependency with the detected package manager");
-    const install = await runCommand(manager, [
-      manager === "npm" ? "install" : "add",
-      `${migration.dependency}@^${migration.targetVersion.split(".")[0]}.0.0`,
-    ], { cwd: repository.rootPath });
+    const installStart = Date.now();
+    const installTarget = migration.targetVersion;
+    logger.info(
+      {
+        migrationId,
+        manager,
+        dependency: migration.dependency,
+        target: installTarget,
+        cwd: repository.rootPath,
+      },
+      "[MIGRATION] Running dependency install",
+    );
+
+    const install = await runCommand(
+      manager,
+      [manager === "npm" ? "install" : "add", `${migration.dependency}@${installTarget}`],
+      { cwd: repository.rootPath },
+    );
+
+    const installDuration = Date.now() - installStart;
+    logger.info(
+      {
+        migrationId,
+        code: install.code,
+        durationMs: installDuration,
+        stderr: install.stderr.slice(0, 300),
+        stdout: install.stdout.slice(0, 300),
+      },
+      "[MIGRATION] Dependency install completed",
+    );
+
     if (install.code !== 0) {
-      // Network/registry may be unavailable in sandboxed environments.
-      // Update package.json directly as a fallback so the agent still sees the
-      // target version, and record the install failure without aborting the run.
-      await update("migration", `Dependency install failed via ${manager}; falling back to manifest edit`, "warning");
-      try {
-        const manifestPath = path.join(repository.rootPath, "package.json");
-        const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
-        const section = manifest[migration.dependency in manifest.dependencies ? "dependencies" : "devDependencies"] as Record<string, string> | undefined;
-        if (section && migration.dependency in section) {
-          section[migration.dependency] = `^${migration.targetVersion.split(".")[0]}.0.0`;
-        } else if (manifest.dependencies) {
-          (manifest.dependencies as Record<string, string>)[migration.dependency] = `^${migration.targetVersion.split(".")[0]}.0.0`;
-        } else {
-          manifest.dependencies = { [migration.dependency]: `^${migration.targetVersion.split(".")[0]}.0.0` };
-        }
-        await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
-      } catch (manifestErr) {
-        migration.remainingIssues.push(`Manifest edit also failed: ${manifestErr instanceof Error ? manifestErr.message : String(manifestErr)}`.slice(0, 500));
-      }
-      migration.remainingIssues.push(`Dependency install via ${manager} failed: ${(install.stderr || install.stdout).slice(0, 500)}`);
-    } else {
-      await update("migration", `Dependency updated to ^${migration.targetVersion.split(".")[0]}.0.0`, "success");
+      const errorMsg = `Package manager ${manager} install failed: ${(install.stderr || install.stdout).slice(0, 500)}`;
+      migration.remainingIssues.push(errorMsg);
+      await update(
+        "migration",
+        `Dependency install failed: ${errorMsg.slice(0, 200)}`,
+        "error",
+      );
+      throw new DependencyValidationError(
+        "DEPENDENCY_INSTALL_FAILURE",
+        errorMsg,
+      );
     }
-    migration.changes = [`Updated ${migration.dependency} using ${manager} to ^${migration.targetVersion.split(".")[0]}.0.0`];
+
+    // Verify lockfile was actually updated
+    const lockfileCheck = await validateLockfileUpdated(
+      repository.rootPath,
+      manager,
+      lockfileBefore,
+    );
+
+    if (!lockfileCheck.changed) {
+      const errorMsg = lockfileCheck.reason || "Lockfile was not updated after install";
+      migration.remainingIssues.push(errorMsg);
+      await update("migration", `Lockfile verification failed: ${errorMsg}`, "warning");
+    }
+
+    // Verify the installed version matches the target
+    const versionCheck = await verifyInstalledVersion(
+      repository.rootPath,
+      migration.dependency,
+      installTarget,
+      manager,
+    );
+
+    logger.info(
+      {
+        migrationId,
+        dependency: migration.dependency,
+        requested: installTarget,
+        installed: versionCheck.installed,
+        matches: versionCheck.matches,
+      },
+      "[MIGRATION] Dependency version verification",
+    );
+
+    if (!versionCheck.matches) {
+      const errorMsg = `Installed version does not match target: requested "${installTarget}", got "${versionCheck.installed}"`;
+      migration.remainingIssues.push(errorMsg);
+      await update("migration", errorMsg, "error");
+      throw new DependencyValidationError(
+        "DEPENDENCY_VERSION_MISMATCH",
+        errorMsg,
+      );
+    }
+
+    await update(
+      "migration",
+      `Dependency successfully updated to ${versionCheck.installed}`,
+      "success",
+    );
+    migration.changes = [
+      `Updated ${migration.dependency} from ${migration.oldVersion} to ${versionCheck.installed} using ${manager}`,
+    ];
     migration.attemptNumber = 1;
     await update("migration", "Dependency updated; agent will now migrate code usages");
 
     // 5) Run the coding agent against the live Grok provider.
     let agentState: import("../agents/agent-state").AgentState | undefined;
     let agentFinished = true;
-    logger.info({ migrationId, dependency: migration.dependency, workspaceRoot: repository.rootPath }, "Starting coding agent");
+    logger.info({ migrationId, dependency: migration.dependency, workspaceRoot: repository.rootPath }, "[MIGRATION] Starting coding agent");
 try {
       // Tests may inject a scripted provider; otherwise use the live xAI/Grok one.
       const provider = __migAgentProvider ?? getGrokProvider();
-      logger.info({ migrationId, providerConfigured: provider.isConfigured(), model: provider.constructor.name }, "Coding agent provider resolved");
+      logger.info({ migrationId, providerConfigured: provider.isConfigured(), model: provider.constructor.name }, "[MIGRATION] Agent provider resolved");
+      logger.info(
+        { migrationId, XAI_API_KEY_present: Boolean(process.env.XAI_API_KEY), XAI_API_KEY_length: process.env.XAI_API_KEY?.length ?? 0 },
+        "[MIGRATION] Environment check before Grok call",
+      );
+      const agentStart = Date.now();
+      const research = migration.research;
+      const riskS = migration.riskSummary;
+      const researchSummary = research
+        ? [
+            `- Confidence: ${research.confidence}`,
+            research.breakingChanges.length ? `- Breaking changes: ${research.breakingChanges.join("; ")}` : null,
+            research.removedApis.length ? `- Removed APIs: ${research.removedApis.join("; ")}` : null,
+            research.renamedApis.length ? `- Renamed APIs: ${research.renamedApis.join("; ")}` : null,
+            research.changedApis.length ? `- Changed APIs: ${research.changedApis.join("; ")}` : null,
+            research.configurationChanges.length ? `- Config changes: ${research.configurationChanges.join("; ")}` : null,
+            research.importChanges.length ? `- Import changes: ${research.importChanges.join("; ")}` : null,
+          ]
+            .filter(Boolean)
+            .join("\n")
+        : "";
+      const impactSummary = scan.codeFindings.length
+        ? scan.codeFindings
+            .slice(0, 80)
+            .map((f) => `${f.filePath}:${f.line} [${f.usageType}] ${f.symbol} — ${f.matchedCode}`)
+            .join("\n")
+        : "";
+      const riskSummary = riskS
+        ? `High=${riskS.high}, Medium=${riskS.medium}, Low=${riskS.low}. Affected APIs: ${riskS.affectedApis.join(", ") || "none"}.`
+        : "";
       const result = await runCodingAgent(provider, {
         migrationId,
         workspaceRoot: repository.rootPath,
@@ -365,10 +611,24 @@ try {
         currentVersion: migration.oldVersion,
         targetMajor: migration.targetVersion.split(".")[0],
         mode: migration.mode,
+        researchSummary,
+        impactSummary,
+        riskSummary,
       }, {
         onEvent: (level, message) => void emitAgentEvent(level as "info" | "success" | "warning" | "error", message),
       });
-      logger.info({ migrationId, resultStatus: result.status, patchesApplied: result.patchesApplied, toolCalls: result.agentState?.toolCalls?.length, filesModified: result.agentState?.filesModified }, "Coding agent completed");
+      logger.info(
+        {
+          migrationId,
+          resultStatus: result.status,
+          patchesApplied: result.patchesApplied,
+          toolCalls: result.agentState?.toolCalls?.length ?? 0,
+          filesModified: result.agentState?.filesModified?.length ?? 0,
+          filesInspected: result.agentState?.filesInspected?.length ?? 0,
+          durationMs: Date.now() - agentStart,
+        },
+        "[MIGRATION] Coding agent completed",
+      );
       agentState = result.agentState;
       migration.plan = result.plan
         ? {
@@ -376,6 +636,14 @@ try {
             breakingChanges: result.plan.breakingChanges,
             plannedChanges: result.plan.plannedChanges,
             validationCommands: result.plan.verificationCommands,
+            migrationFindings: result.plan.migrationFindings ?? [],
+            affectedApis: result.plan.affectedApis ?? [],
+            riskAssessment: result.plan.riskAssessment ?? [],
+            plannedPackageChanges: result.plan.plannedPackageChanges ?? [],
+            plannedSourceChanges: result.plan.plannedSourceChanges ?? [],
+            plannedConfigChanges: result.plan.plannedConfigChanges ?? [],
+            potentialFailurePoints: result.plan.potentialFailurePoints ?? [],
+            researchConfidence: result.plan.researchConfidence,
           }
         : migration.plan;
       migration.agentState = result.agentState;
@@ -409,26 +677,164 @@ try {
       await update("migration", "Agent applied targeted changes to the repository", "success");
     }
 
-    // 6) Verification
-    await update("verification", "Running repository verification commands");
-    await verifyMigration(migration, repository.rootPath, repository);
+    // 6) Verification + self-healing retry loop (agentic only).
+    const healProvider = () => __migAgentProvider ?? getGrokProviderOrNull();
+    const researchText = migration.research
+      ? [
+          `- Confidence: ${migration.research.confidence}`,
+          migration.research.breakingChanges.length ? `- Breaking changes: ${migration.research.breakingChanges.join("; ")}` : null,
+          migration.research.removedApis.length ? `- Removed APIs: ${migration.research.removedApis.join("; ")}` : null,
+          migration.research.renamedApis.length ? `- Renamed APIs: ${migration.research.renamedApis.join("; ")}` : null,
+          migration.research.changedApis.length ? `- Changed APIs: ${migration.research.changedApis.join("; ")}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : "";
+    const impactText = scan.codeFindings.length
+      ? scan.codeFindings.slice(0, 60).map((f) => `${f.filePath}:${f.line} [${f.usageType}] ${f.symbol}`).join("\n")
+      : "";
+    const planText = migration.plan ? `${migration.plan.summary || ""}\n${(migration.plan.plannedChanges ?? []).join("\n")}` : "";
 
-    // 7) Real diff (baseline commit → current workspace)
+    migration.attemptNumber = 1;
+    let healRounds = 0;
+    const isCancelled = () => migration.cancelled === true;
+
+    // Record a verification attempt into state.
+    const recordAttempt = async (number: number, passedNow: boolean, diagnosis: string | null, patchOverride?: string) => {
+      const filesModified = migration.agentState?.filesModified ?? [];
+      migration.attempts[number - 1] = {
+        number,
+        result: passedNow ? "PASS" : "FAIL",
+        diagnosis,
+        filesChanged: migration.diff?.filesChanged ?? 0,
+        filesModified,
+        filesInspected: migration.agentState?.filesInspected ?? [],
+        patch: patchOverride,
+      };
+      migration.attemptNumber = number;
+      await saveMigration(migration);
+      await emitAgentEvent(passedNow ? "success" : "error", `Attempt ${number} — ${passedNow ? "PASS" : "FAIL"}`);
+    };
+
+    const refreshedMigration = async () => (await getMigration(migrationId)) ?? migration;
+
+    let failed = await verifyMigration(migration, repository.rootPath, repository);
     await runCommand("git", ["add", "-N", "."], { cwd: repository.rootPath });
     migration.diff = await captureDiff(repository.rootPath);
 
-    const passed = migration.tests !== "fail" && migration.build !== "fail" && migration.typecheck !== "fail" && migration.lint !== "fail";
-    migration.attempts = [{
-      number: 1,
-      result: passed ? "PASS" : "FAIL",
-      diagnosis: passed ? null : migration.remainingIssues[0] ?? "Verification command failed.",
-      filesChanged: migration.diff.filesChanged,
-    }];
+    let passed = verificationPassed(migration) && !isCancelled();
+    await recordAttempt(1, passed && !isCancelled(), passed ? null : (failed[0]?.stderr || failed[0]?.stdout || "Verification command failed.").slice(0, 900));
+
+    // Baseline mode: no autonomous diagnosis/repair. Agentic mode self-heals.
+    if (migration.mode === "baseline") {
+      migration.baseline = {
+        result: passed ? "PASS" : "FAIL",
+        tests: migration.tests,
+        build: migration.build,
+        typecheck: migration.typecheck,
+        lint: migration.lint,
+        filesChanged: migration.diff.filesChanged,
+      };
+    }
+
+    // Self-healing (agentic only): diagnose + corrective repair, bounded to a max
+    // of 3 total verification attempts (MAX_HEAL_ATTEMPTS). Never infinite.
+    while (migration.mode !== "baseline" && !passed && migration.attemptNumber < 3 && !isCancelled()) {
+      healRounds += 1;
+      await update("heal", `Verification failed — diagnosing (attempt ${migration.attemptNumber + 1})`);
+      await emitAgentEvent("info", "Sending failure to Grok for diagnosis");
+
+      let diagnosis = "Verification failed; see command output.";
+      let diagnosisOk = false;
+      try {
+        const provider = healProvider();
+        if (!provider) throw new HealError("HEAL_UNAVAILABLE: no Grok provider");
+        const d = await diagnoseFailure(provider, {
+          dependency: migration.dependency,
+          oldVersion: migration.oldVersion,
+          targetVersion: migration.targetVersion,
+          researchSummary: researchText,
+          planSummary: planText,
+          impactSummary: impactText,
+          failedCommands: failed.map((f) => ({ ...f })),
+          filesModified: migration.agentState?.filesModified ?? [],
+          affectedFiles: migration.impactFiles,
+        });
+        diagnosis = d.summary;
+        diagnosisOk = true;
+      } catch (diagError) {
+        const msg = diagError instanceof Error ? diagError.message : String(diagError);
+        const short = msg.slice(0, 500);
+        if (!migration.remainingIssues.includes(short)) migration.remainingIssues.push(short);
+        diagnosis = `Automatic diagnosis unavailable (${msg.slice(0, 120)}). Repairing based on failed command output.`;
+      }
+      await emitAgentEvent("info", `Diagnosis: ${diagnosis.slice(0, 300)}`);
+
+      // Corrective repair pass — reuse the live migration state + coding agent.
+      await update("heal", `Applying corrective patch (attempt ${migration.attemptNumber + 1})`);
+      await emitAgentEvent("info", "Corrective patch generation in progress");
+
+      const repairProvider = healProvider();
+      if (repairProvider) {
+        try {
+          const current = await refreshedMigration();
+          const repairResult = await runCodingAgent(repairProvider, {
+            migrationId,
+            workspaceRoot: repository.rootPath,
+            originalRoot: path.join(path.dirname(repository.rootPath), "original"),
+            dependency: migration.dependency,
+            currentVersion: migration.oldVersion,
+            targetMajor: migration.targetVersion.split(".")[0],
+            mode: migration.mode,
+            researchSummary: researchText,
+            impactSummary: impactText,
+            riskSummary: migration.riskSummary
+              ? `High=${migration.riskSummary.high}, Medium=${migration.riskSummary.medium}.`
+              : "",
+          }, {
+            failureContext: { diagnosis, failedCommands: failed.map((f) => f.command) },
+            onEvent: (level, message) => void emitAgentEvent(level as "info" | "success" | "warning" | "error", message),
+          });
+          await refreshedMigration();
+          if (repairResult.patchesApplied > 0) {
+            migration.changes.push(`Corrective patch (attempt ${migration.attemptNumber + 1}): ${repairResult.patchesApplied} patch(es)`);
+          }
+          void current;
+        } catch (repairError) {
+          const short = `Corrective patch failed: ${repairError instanceof Error ? repairError.message : String(repairError)}`.slice(0, 500);
+          if (!migration.remainingIssues.includes(short)) migration.remainingIssues.push(short);
+        }
+      } else {
+        const short = "Corrective patch skipped — no Grok provider available for repair.";
+        if (!migration.remainingIssues.includes(short)) migration.remainingIssues.push(short);
+      }
+
+      await update("heal", `Retrying verification (attempt ${migration.attemptNumber + 1})`);
+      migration.agentState = (await refreshedMigration()).agentState ?? migration.agentState;
+      failed = await verifyMigration(migration, repository.rootPath, repository);
+      await runCommand("git", ["add", "-N", "."], { cwd: repository.rootPath });
+      migration.diff = await captureDiff(repository.rootPath);
+      passed = verificationPassed(migration) && !isCancelled();
+      await recordAttempt(migration.attemptNumber + 1, passed && !isCancelled(), passed ? null : (failed[0]?.stderr || failed[0]?.stdout || "Verification command failed.").slice(0, 900));
+    }
+
+    // 7) Final status + diff.
+    if (isCancelled()) {
+      migration.status = "cancelled";
+      migration.errorCode = null;
+      if (migration.agentState) { migration.agentState.status = "cancelled"; migration.agentState.currentAction = "cancelled"; }
+      await update("cancelled", "Migration cancelled", "warning");
+      return;
+    }
+
     migration.status = passed ? "completed" : "failed";
     migration.errorCode = passed ? null : "VERIFICATION_FAILURE";
     if (migration.agentState) {
       migration.agentState.status = passed ? "completed" : "failed";
       migration.agentState.currentAction = passed ? "complete" : "failed";
+    }
+    if (!passed && migration.attemptNumber >= 3) {
+      migration.remainingIssues.push("Migration could not be automatically repaired after 3 attempts.");
     }
     await update(passed ? "complete" : "failed", passed ? "Migration verified; awaiting approval" : "Migration stopped after verification failure", passed ? "success" : "error");
   } catch (error) {
@@ -448,15 +854,41 @@ export async function startMigration(
 ): Promise<MigrationRecord> {
   const repository = await getRepository(repositoryId);
   if (!repository || repository.status !== "analyzed") throw new Error("REPOSITORY_INVALID: repository is unavailable");
-  const selected = repository.dependencies.find((item) => item.name === dependency);
-  if (!selected) throw new Error("DEPENDENCY_NOT_FOUND: dependency is not installed");
+
+  // Validate dependency exists
+  const depValidation = validateDependency(repository, dependency);
+  if (!depValidation.isValid) {
+    throw new DependencyValidationError(
+      depValidation.error!,
+      depValidation.message || "Dependency validation failed",
+    );
+  }
+
+  // Validate target version format
+  const versionValidation = validateTargetVersion(targetMajor);
+  if (!versionValidation.isValid) {
+    throw new DependencyValidationError(
+      versionValidation.error!,
+      versionValidation.message || "Target version validation failed",
+    );
+  }
+
+  // Validate package manager is supported
+  const pmValidation = validatePackageManager(repository.packageManager);
+  if (!pmValidation.isValid) {
+    throw new DependencyValidationError(
+      pmValidation.error!,
+      pmValidation.message || "Package manager not supported",
+    );
+  }
+
   const migration: MigrationRecord = {
     id: randomUUID(),
     repositoryId,
     repositoryName: repository.name,
     dependency,
-    oldVersion: selected.version,
-    targetVersion: targetMajor,
+    oldVersion: depValidation.currentVersion,
+    targetVersion: versionValidation.normalized!,
     mode,
     status: "queued",
     currentStage: "queued",

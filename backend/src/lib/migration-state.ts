@@ -63,16 +63,52 @@ export interface MigrationRecord {
     breakingChanges: string[];
     plannedChanges: string[];
     validationCommands: string[];
+    /** Phase 2 research-driven plan sections. */
+    migrationFindings?: string[];
+    affectedApis?: string[];
+    riskAssessment?: string[];
+    plannedPackageChanges?: string[];
+    plannedSourceChanges?: string[];
+    plannedConfigChanges?: string[];
+    potentialFailurePoints?: string[];
+    researchConfidence?: "high" | "medium" | "low" | "none";
   } | null;
   impactFiles: string[];
   sources: Array<{ title: string; url: string; finding: string }>;
   changes: string[];
   attempts: Array<{
     number: number;
-    result: string;
+    result: string; // PASS | FAIL | SKIPPED | TIMEOUT
     diagnosis: string | null;
     filesChanged: number;
+    command?: string;
+    exitCode?: number;
+    stdout?: string;
+    stderr?: string;
+    filesInspected?: string[];
+    filesModified?: string[];
+    patch?: string;
   }>;
+  /** Rich per-command verification records (command, status, exit code, stdout, stderr, duration). */
+  verificationCommands?: Array<{
+    command: string;
+    status: "PASS" | "FAIL" | "SKIPPED" | "TIMEOUT";
+    exitCode: number | null;
+    stdout: string;
+    stderr: string;
+    durationMs: number;
+  }>;
+  /** Cancellation flag — when true, running stages stop and retries are prevented. */
+  cancelled?: boolean;
+  /** Baseline-mode result snapshot for mode comparison. */
+  baseline?: {
+    result: string;
+    tests: ResultStatus;
+    build: ResultStatus;
+    typecheck: ResultStatus;
+    lint: ResultStatus;
+    filesChanged: number;
+  } | null;
   remainingIssues: string[];
   diff: {
     filesChanged: number;
@@ -107,6 +143,10 @@ export interface MigrationRecord {
     agentSummary?: string;
     error?: string;
   };
+  /** Phase 2 — structured migration research (sources + synthesized findings). */
+  research?: import("./research-types").MigrationResearch;
+  /** Phase 2 — per-file risk classification after correlating research with usage. */
+  riskSummary?: import("./impact").ImpactSummary;
 }
 
 export interface MigrationEvent {

@@ -18,6 +18,15 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * Alias of /healthz
+ * @summary Health check (alias)
+ */
+export const HealthCheckAliasResponse = zod.object({
+  "status": zod.string()
+})
+
+
+/**
  * @summary Get dashboard summary
  */
 export const GetDashboardResponse = zod.object({
@@ -67,7 +76,92 @@ export const GetDashboardResponse = zod.object({
 })).optional(),
   "agentSummary": zod.string().nullish(),
   "error": zod.string().nullish()
-}).nullish().describe('Public agent activity recorded by the coding agent.')
+}).nullish().describe('Public agent activity recorded by the coding agent.'),
+  "research": zod.object({
+  "dependency": zod.string(),
+  "currentVersion": zod.string(),
+  "targetVersion": zod.string(),
+  "sources": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "url": zod.string(),
+  "source_type": zod.string(),
+  "retrieved_at": zod.coerce.date(),
+  "status": zod.enum(['retrieved', 'unavailable']),
+  "reason": zod.string().nullish(),
+  "key_findings": zod.array(zod.string()),
+  "excerpt": zod.string()
+})),
+  "breakingChanges": zod.array(zod.string()).optional(),
+  "removedApis": zod.array(zod.string()).optional(),
+  "renamedApis": zod.array(zod.string()).optional(),
+  "changedApis": zod.array(zod.string()).optional(),
+  "configurationChanges": zod.array(zod.string()).optional(),
+  "importChanges": zod.array(zod.string()).optional(),
+  "compatibilityRequirements": zod.array(zod.string()).optional(),
+  "upgradeNotes": zod.array(zod.string()).optional(),
+  "findings": zod.array(zod.object({
+  "category": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "sourceUrl": zod.string().nullish(),
+  "evidence": zod.string(),
+  "confident": zod.boolean()
+})).optional(),
+  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+}).nullish(),
+  "riskSummary": zod.object({
+  "affectedFiles": zod.number(),
+  "affectedUsages": zod.number(),
+  "high": zod.number(),
+  "medium": zod.number(),
+  "low": zod.number(),
+  "affectedApis": zod.array(zod.string()),
+  "affectedConfig": zod.array(zod.string()),
+  "affectedTests": zod.array(zod.string()),
+  "affectedBuildLint": zod.array(zod.string()),
+  "findings": zod.array(zod.object({
+  "filePath": zod.string(),
+  "line": zod.number(),
+  "usageType": zod.string(),
+  "symbol": zod.string(),
+  "matchedCode": zod.string(),
+  "reason": zod.string(),
+  "confidence": zod.string(),
+  "risk": zod.string()
+})).optional()
+}).nullish(),
+  "attempts": zod.array(zod.object({
+  "number": zod.number(),
+  "result": zod.string(),
+  "diagnosis": zod.string().nullable(),
+  "filesChanged": zod.number(),
+  "command": zod.string().nullish(),
+  "exitCode": zod.number().nullish(),
+  "stdout": zod.string().nullish(),
+  "stderr": zod.string().nullish(),
+  "filesInspected": zod.array(zod.string()).optional(),
+  "filesModified": zod.array(zod.string()).optional(),
+  "patch": zod.string().nullish()
+})).optional(),
+  "verificationCommands": zod.array(zod.object({
+  "command": zod.string(),
+  "status": zod.enum(['PASS', 'FAIL', 'SKIPPED', 'TIMEOUT']),
+  "exitCode": zod.number().nullable(),
+  "stdout": zod.string(),
+  "stderr": zod.string(),
+  "durationMs": zod.number()
+})).optional(),
+  "baseline": zod.object({
+  "result": zod.string(),
+  "tests": zod.string(),
+  "build": zod.string(),
+  "typecheck": zod.string(),
+  "lint": zod.string(),
+  "filesChanged": zod.number()
+}).nullish(),
+  "cancelled": zod.boolean().optional()
 })),
   "capabilities": zod.array(zod.string())
 })
@@ -77,7 +171,7 @@ export const GetDashboardResponse = zod.object({
  * @summary Upload and analyze a ZIP repository
  */
 export const UploadRepositoryBody = zod.object({
-  "file": zod.string()
+  "file": zod.instanceof(File).describe('The ZIP archive of the repository to analyze.')
 })
 
 export const UploadRepositoryResponse = zod.object({
@@ -199,7 +293,92 @@ export const ListMigrationsResponseItem = zod.object({
 })).optional(),
   "agentSummary": zod.string().nullish(),
   "error": zod.string().nullish()
-}).nullish().describe('Public agent activity recorded by the coding agent.')
+}).nullish().describe('Public agent activity recorded by the coding agent.'),
+  "research": zod.object({
+  "dependency": zod.string(),
+  "currentVersion": zod.string(),
+  "targetVersion": zod.string(),
+  "sources": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "url": zod.string(),
+  "source_type": zod.string(),
+  "retrieved_at": zod.coerce.date(),
+  "status": zod.enum(['retrieved', 'unavailable']),
+  "reason": zod.string().nullish(),
+  "key_findings": zod.array(zod.string()),
+  "excerpt": zod.string()
+})),
+  "breakingChanges": zod.array(zod.string()).optional(),
+  "removedApis": zod.array(zod.string()).optional(),
+  "renamedApis": zod.array(zod.string()).optional(),
+  "changedApis": zod.array(zod.string()).optional(),
+  "configurationChanges": zod.array(zod.string()).optional(),
+  "importChanges": zod.array(zod.string()).optional(),
+  "compatibilityRequirements": zod.array(zod.string()).optional(),
+  "upgradeNotes": zod.array(zod.string()).optional(),
+  "findings": zod.array(zod.object({
+  "category": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "sourceUrl": zod.string().nullish(),
+  "evidence": zod.string(),
+  "confident": zod.boolean()
+})).optional(),
+  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+}).nullish(),
+  "riskSummary": zod.object({
+  "affectedFiles": zod.number(),
+  "affectedUsages": zod.number(),
+  "high": zod.number(),
+  "medium": zod.number(),
+  "low": zod.number(),
+  "affectedApis": zod.array(zod.string()),
+  "affectedConfig": zod.array(zod.string()),
+  "affectedTests": zod.array(zod.string()),
+  "affectedBuildLint": zod.array(zod.string()),
+  "findings": zod.array(zod.object({
+  "filePath": zod.string(),
+  "line": zod.number(),
+  "usageType": zod.string(),
+  "symbol": zod.string(),
+  "matchedCode": zod.string(),
+  "reason": zod.string(),
+  "confidence": zod.string(),
+  "risk": zod.string()
+})).optional()
+}).nullish(),
+  "attempts": zod.array(zod.object({
+  "number": zod.number(),
+  "result": zod.string(),
+  "diagnosis": zod.string().nullable(),
+  "filesChanged": zod.number(),
+  "command": zod.string().nullish(),
+  "exitCode": zod.number().nullish(),
+  "stdout": zod.string().nullish(),
+  "stderr": zod.string().nullish(),
+  "filesInspected": zod.array(zod.string()).optional(),
+  "filesModified": zod.array(zod.string()).optional(),
+  "patch": zod.string().nullish()
+})).optional(),
+  "verificationCommands": zod.array(zod.object({
+  "command": zod.string(),
+  "status": zod.enum(['PASS', 'FAIL', 'SKIPPED', 'TIMEOUT']),
+  "exitCode": zod.number().nullable(),
+  "stdout": zod.string(),
+  "stderr": zod.string(),
+  "durationMs": zod.number()
+})).optional(),
+  "baseline": zod.object({
+  "result": zod.string(),
+  "tests": zod.string(),
+  "build": zod.string(),
+  "typecheck": zod.string(),
+  "lint": zod.string(),
+  "filesChanged": zod.number()
+}).nullish(),
+  "cancelled": zod.boolean().optional()
 })
 export const ListMigrationsResponse = zod.array(ListMigrationsResponseItem)
 
@@ -260,7 +439,92 @@ export const CreateMigrationResponse = zod.object({
 })).optional(),
   "agentSummary": zod.string().nullish(),
   "error": zod.string().nullish()
-}).nullish().describe('Public agent activity recorded by the coding agent.')
+}).nullish().describe('Public agent activity recorded by the coding agent.'),
+  "research": zod.object({
+  "dependency": zod.string(),
+  "currentVersion": zod.string(),
+  "targetVersion": zod.string(),
+  "sources": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "url": zod.string(),
+  "source_type": zod.string(),
+  "retrieved_at": zod.coerce.date(),
+  "status": zod.enum(['retrieved', 'unavailable']),
+  "reason": zod.string().nullish(),
+  "key_findings": zod.array(zod.string()),
+  "excerpt": zod.string()
+})),
+  "breakingChanges": zod.array(zod.string()).optional(),
+  "removedApis": zod.array(zod.string()).optional(),
+  "renamedApis": zod.array(zod.string()).optional(),
+  "changedApis": zod.array(zod.string()).optional(),
+  "configurationChanges": zod.array(zod.string()).optional(),
+  "importChanges": zod.array(zod.string()).optional(),
+  "compatibilityRequirements": zod.array(zod.string()).optional(),
+  "upgradeNotes": zod.array(zod.string()).optional(),
+  "findings": zod.array(zod.object({
+  "category": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "sourceUrl": zod.string().nullish(),
+  "evidence": zod.string(),
+  "confident": zod.boolean()
+})).optional(),
+  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+}).nullish(),
+  "riskSummary": zod.object({
+  "affectedFiles": zod.number(),
+  "affectedUsages": zod.number(),
+  "high": zod.number(),
+  "medium": zod.number(),
+  "low": zod.number(),
+  "affectedApis": zod.array(zod.string()),
+  "affectedConfig": zod.array(zod.string()),
+  "affectedTests": zod.array(zod.string()),
+  "affectedBuildLint": zod.array(zod.string()),
+  "findings": zod.array(zod.object({
+  "filePath": zod.string(),
+  "line": zod.number(),
+  "usageType": zod.string(),
+  "symbol": zod.string(),
+  "matchedCode": zod.string(),
+  "reason": zod.string(),
+  "confidence": zod.string(),
+  "risk": zod.string()
+})).optional()
+}).nullish(),
+  "attempts": zod.array(zod.object({
+  "number": zod.number(),
+  "result": zod.string(),
+  "diagnosis": zod.string().nullable(),
+  "filesChanged": zod.number(),
+  "command": zod.string().nullish(),
+  "exitCode": zod.number().nullish(),
+  "stdout": zod.string().nullish(),
+  "stderr": zod.string().nullish(),
+  "filesInspected": zod.array(zod.string()).optional(),
+  "filesModified": zod.array(zod.string()).optional(),
+  "patch": zod.string().nullish()
+})).optional(),
+  "verificationCommands": zod.array(zod.object({
+  "command": zod.string(),
+  "status": zod.enum(['PASS', 'FAIL', 'SKIPPED', 'TIMEOUT']),
+  "exitCode": zod.number().nullable(),
+  "stdout": zod.string(),
+  "stderr": zod.string(),
+  "durationMs": zod.number()
+})).optional(),
+  "baseline": zod.object({
+  "result": zod.string(),
+  "tests": zod.string(),
+  "build": zod.string(),
+  "typecheck": zod.string(),
+  "lint": zod.string(),
+  "filesChanged": zod.number()
+}).nullish(),
+  "cancelled": zod.boolean().optional()
 })
 
 
@@ -313,7 +577,92 @@ export const GetMigrationResponse = zod.object({
 })).optional(),
   "agentSummary": zod.string().nullish(),
   "error": zod.string().nullish()
-}).nullish().describe('Public agent activity recorded by the coding agent.')
+}).nullish().describe('Public agent activity recorded by the coding agent.'),
+  "research": zod.object({
+  "dependency": zod.string(),
+  "currentVersion": zod.string(),
+  "targetVersion": zod.string(),
+  "sources": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "url": zod.string(),
+  "source_type": zod.string(),
+  "retrieved_at": zod.coerce.date(),
+  "status": zod.enum(['retrieved', 'unavailable']),
+  "reason": zod.string().nullish(),
+  "key_findings": zod.array(zod.string()),
+  "excerpt": zod.string()
+})),
+  "breakingChanges": zod.array(zod.string()).optional(),
+  "removedApis": zod.array(zod.string()).optional(),
+  "renamedApis": zod.array(zod.string()).optional(),
+  "changedApis": zod.array(zod.string()).optional(),
+  "configurationChanges": zod.array(zod.string()).optional(),
+  "importChanges": zod.array(zod.string()).optional(),
+  "compatibilityRequirements": zod.array(zod.string()).optional(),
+  "upgradeNotes": zod.array(zod.string()).optional(),
+  "findings": zod.array(zod.object({
+  "category": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "sourceUrl": zod.string().nullish(),
+  "evidence": zod.string(),
+  "confident": zod.boolean()
+})).optional(),
+  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+}).nullish(),
+  "riskSummary": zod.object({
+  "affectedFiles": zod.number(),
+  "affectedUsages": zod.number(),
+  "high": zod.number(),
+  "medium": zod.number(),
+  "low": zod.number(),
+  "affectedApis": zod.array(zod.string()),
+  "affectedConfig": zod.array(zod.string()),
+  "affectedTests": zod.array(zod.string()),
+  "affectedBuildLint": zod.array(zod.string()),
+  "findings": zod.array(zod.object({
+  "filePath": zod.string(),
+  "line": zod.number(),
+  "usageType": zod.string(),
+  "symbol": zod.string(),
+  "matchedCode": zod.string(),
+  "reason": zod.string(),
+  "confidence": zod.string(),
+  "risk": zod.string()
+})).optional()
+}).nullish(),
+  "attempts": zod.array(zod.object({
+  "number": zod.number(),
+  "result": zod.string(),
+  "diagnosis": zod.string().nullable(),
+  "filesChanged": zod.number(),
+  "command": zod.string().nullish(),
+  "exitCode": zod.number().nullish(),
+  "stdout": zod.string().nullish(),
+  "stderr": zod.string().nullish(),
+  "filesInspected": zod.array(zod.string()).optional(),
+  "filesModified": zod.array(zod.string()).optional(),
+  "patch": zod.string().nullish()
+})).optional(),
+  "verificationCommands": zod.array(zod.object({
+  "command": zod.string(),
+  "status": zod.enum(['PASS', 'FAIL', 'SKIPPED', 'TIMEOUT']),
+  "exitCode": zod.number().nullable(),
+  "stdout": zod.string(),
+  "stderr": zod.string(),
+  "durationMs": zod.number()
+})).optional(),
+  "baseline": zod.object({
+  "result": zod.string(),
+  "tests": zod.string(),
+  "build": zod.string(),
+  "typecheck": zod.string(),
+  "lint": zod.string(),
+  "filesChanged": zod.number()
+}).nullish(),
+  "cancelled": zod.boolean().optional()
 })
 
 
@@ -387,9 +736,103 @@ export const GetMigrationReportResponse = zod.object({
   "number": zod.number(),
   "result": zod.string(),
   "diagnosis": zod.string().nullable(),
-  "filesChanged": zod.number()
+  "filesChanged": zod.number(),
+  "command": zod.string().nullish(),
+  "exitCode": zod.number().nullish(),
+  "stdout": zod.string().nullish(),
+  "stderr": zod.string().nullish(),
+  "filesInspected": zod.array(zod.string()).optional(),
+  "filesModified": zod.array(zod.string()).optional(),
+  "patch": zod.string().nullish()
 })),
-  "remainingIssues": zod.array(zod.string())
+  "remainingIssues": zod.array(zod.string()),
+  "research": zod.object({
+  "dependency": zod.string(),
+  "currentVersion": zod.string(),
+  "targetVersion": zod.string(),
+  "sources": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "url": zod.string(),
+  "source_type": zod.string(),
+  "retrieved_at": zod.coerce.date(),
+  "status": zod.enum(['retrieved', 'unavailable']),
+  "reason": zod.string().nullish(),
+  "key_findings": zod.array(zod.string()),
+  "excerpt": zod.string()
+})),
+  "breakingChanges": zod.array(zod.string()).optional(),
+  "removedApis": zod.array(zod.string()).optional(),
+  "renamedApis": zod.array(zod.string()).optional(),
+  "changedApis": zod.array(zod.string()).optional(),
+  "configurationChanges": zod.array(zod.string()).optional(),
+  "importChanges": zod.array(zod.string()).optional(),
+  "compatibilityRequirements": zod.array(zod.string()).optional(),
+  "upgradeNotes": zod.array(zod.string()).optional(),
+  "findings": zod.array(zod.object({
+  "category": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "sourceUrl": zod.string().nullish(),
+  "evidence": zod.string(),
+  "confident": zod.boolean()
+})).optional(),
+  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+}).nullish(),
+  "riskSummary": zod.object({
+  "affectedFiles": zod.number(),
+  "affectedUsages": zod.number(),
+  "high": zod.number(),
+  "medium": zod.number(),
+  "low": zod.number(),
+  "affectedApis": zod.array(zod.string()),
+  "affectedConfig": zod.array(zod.string()),
+  "affectedTests": zod.array(zod.string()),
+  "affectedBuildLint": zod.array(zod.string()),
+  "findings": zod.array(zod.object({
+  "filePath": zod.string(),
+  "line": zod.number(),
+  "usageType": zod.string(),
+  "symbol": zod.string(),
+  "matchedCode": zod.string(),
+  "reason": zod.string(),
+  "confidence": zod.string(),
+  "risk": zod.string()
+})).optional()
+}).nullish(),
+  "affectedApiFindings": zod.array(zod.string()).optional(),
+  "plan": zod.object({
+  "summary": zod.string(),
+  "breakingChanges": zod.array(zod.string()),
+  "plannedChanges": zod.array(zod.string()),
+  "validationCommands": zod.array(zod.string()),
+  "migrationFindings": zod.array(zod.string()).optional(),
+  "affectedApis": zod.array(zod.string()).optional(),
+  "riskAssessment": zod.array(zod.string()).optional(),
+  "plannedPackageChanges": zod.array(zod.string()).optional(),
+  "plannedSourceChanges": zod.array(zod.string()).optional(),
+  "plannedConfigChanges": zod.array(zod.string()).optional(),
+  "potentialFailurePoints": zod.array(zod.string()).optional(),
+  "researchConfidence": zod.enum(['high', 'medium', 'low', 'none']).optional()
+}).nullish(),
+  "verificationCommands": zod.array(zod.object({
+  "command": zod.string(),
+  "status": zod.enum(['PASS', 'FAIL', 'SKIPPED', 'TIMEOUT']),
+  "exitCode": zod.number().nullable(),
+  "stdout": zod.string(),
+  "stderr": zod.string(),
+  "durationMs": zod.number()
+})).optional(),
+  "baseline": zod.object({
+  "result": zod.string(),
+  "tests": zod.string(),
+  "build": zod.string(),
+  "typecheck": zod.string(),
+  "lint": zod.string(),
+  "filesChanged": zod.number()
+}).nullish(),
+  "approvalStatus": zod.enum(['APPROVED', 'REJECTED', 'PENDING']).optional()
 })
 
 
@@ -442,7 +885,230 @@ export const ApproveMigrationResponse = zod.object({
 })).optional(),
   "agentSummary": zod.string().nullish(),
   "error": zod.string().nullish()
-}).nullish().describe('Public agent activity recorded by the coding agent.')
+}).nullish().describe('Public agent activity recorded by the coding agent.'),
+  "research": zod.object({
+  "dependency": zod.string(),
+  "currentVersion": zod.string(),
+  "targetVersion": zod.string(),
+  "sources": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "url": zod.string(),
+  "source_type": zod.string(),
+  "retrieved_at": zod.coerce.date(),
+  "status": zod.enum(['retrieved', 'unavailable']),
+  "reason": zod.string().nullish(),
+  "key_findings": zod.array(zod.string()),
+  "excerpt": zod.string()
+})),
+  "breakingChanges": zod.array(zod.string()).optional(),
+  "removedApis": zod.array(zod.string()).optional(),
+  "renamedApis": zod.array(zod.string()).optional(),
+  "changedApis": zod.array(zod.string()).optional(),
+  "configurationChanges": zod.array(zod.string()).optional(),
+  "importChanges": zod.array(zod.string()).optional(),
+  "compatibilityRequirements": zod.array(zod.string()).optional(),
+  "upgradeNotes": zod.array(zod.string()).optional(),
+  "findings": zod.array(zod.object({
+  "category": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "sourceUrl": zod.string().nullish(),
+  "evidence": zod.string(),
+  "confident": zod.boolean()
+})).optional(),
+  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+}).nullish(),
+  "riskSummary": zod.object({
+  "affectedFiles": zod.number(),
+  "affectedUsages": zod.number(),
+  "high": zod.number(),
+  "medium": zod.number(),
+  "low": zod.number(),
+  "affectedApis": zod.array(zod.string()),
+  "affectedConfig": zod.array(zod.string()),
+  "affectedTests": zod.array(zod.string()),
+  "affectedBuildLint": zod.array(zod.string()),
+  "findings": zod.array(zod.object({
+  "filePath": zod.string(),
+  "line": zod.number(),
+  "usageType": zod.string(),
+  "symbol": zod.string(),
+  "matchedCode": zod.string(),
+  "reason": zod.string(),
+  "confidence": zod.string(),
+  "risk": zod.string()
+})).optional()
+}).nullish(),
+  "attempts": zod.array(zod.object({
+  "number": zod.number(),
+  "result": zod.string(),
+  "diagnosis": zod.string().nullable(),
+  "filesChanged": zod.number(),
+  "command": zod.string().nullish(),
+  "exitCode": zod.number().nullish(),
+  "stdout": zod.string().nullish(),
+  "stderr": zod.string().nullish(),
+  "filesInspected": zod.array(zod.string()).optional(),
+  "filesModified": zod.array(zod.string()).optional(),
+  "patch": zod.string().nullish()
+})).optional(),
+  "verificationCommands": zod.array(zod.object({
+  "command": zod.string(),
+  "status": zod.enum(['PASS', 'FAIL', 'SKIPPED', 'TIMEOUT']),
+  "exitCode": zod.number().nullable(),
+  "stdout": zod.string(),
+  "stderr": zod.string(),
+  "durationMs": zod.number()
+})).optional(),
+  "baseline": zod.object({
+  "result": zod.string(),
+  "tests": zod.string(),
+  "build": zod.string(),
+  "typecheck": zod.string(),
+  "lint": zod.string(),
+  "filesChanged": zod.number()
+}).nullish(),
+  "cancelled": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Reject a completed migration
+ */
+export const RejectMigrationParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RejectMigrationResponse = zod.object({
+  "id": zod.string(),
+  "repositoryId": zod.string(),
+  "repositoryName": zod.string(),
+  "dependency": zod.string(),
+  "oldVersion": zod.string(),
+  "targetVersion": zod.string(),
+  "mode": zod.enum(['agentic', 'baseline']),
+  "status": zod.enum(['queued', 'running', 'completed', 'failed', 'cancelled', 'approved', 'rejected']),
+  "currentStage": zod.string(),
+  "attemptNumber": zod.number(),
+  "affectedFiles": zod.number(),
+  "affectedUsages": zod.number(),
+  "tests": zod.enum(['pass', 'fail', 'skipped', 'running']),
+  "build": zod.enum(['pass', 'fail', 'skipped', 'running']),
+  "typecheck": zod.enum(['pass', 'fail', 'skipped', 'running']),
+  "lint": zod.enum(['pass', 'fail', 'skipped', 'running']),
+  "errorCode": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "agentState": zod.object({
+  "status": zod.string().optional(),
+  "currentAction": zod.string().optional(),
+  "toolCalls": zod.array(zod.object({
+  "timestamp": zod.coerce.date(),
+  "tool": zod.string(),
+  "inputSummary": zod.string(),
+  "resultSummary": zod.string(),
+  "success": zod.boolean(),
+  "durationMs": zod.number(),
+  "errorType": zod.string().nullish()
+})).optional(),
+  "filesInspected": zod.array(zod.string()).optional(),
+  "filesModified": zod.array(zod.string()).optional(),
+  "patchesApplied": zod.number().optional(),
+  "planSummary": zod.string().nullish(),
+  "fileChanges": zod.array(zod.object({
+  "path": zod.string().optional(),
+  "action": zod.string().optional()
+})).optional(),
+  "agentSummary": zod.string().nullish(),
+  "error": zod.string().nullish()
+}).nullish().describe('Public agent activity recorded by the coding agent.'),
+  "research": zod.object({
+  "dependency": zod.string(),
+  "currentVersion": zod.string(),
+  "targetVersion": zod.string(),
+  "sources": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "url": zod.string(),
+  "source_type": zod.string(),
+  "retrieved_at": zod.coerce.date(),
+  "status": zod.enum(['retrieved', 'unavailable']),
+  "reason": zod.string().nullish(),
+  "key_findings": zod.array(zod.string()),
+  "excerpt": zod.string()
+})),
+  "breakingChanges": zod.array(zod.string()).optional(),
+  "removedApis": zod.array(zod.string()).optional(),
+  "renamedApis": zod.array(zod.string()).optional(),
+  "changedApis": zod.array(zod.string()).optional(),
+  "configurationChanges": zod.array(zod.string()).optional(),
+  "importChanges": zod.array(zod.string()).optional(),
+  "compatibilityRequirements": zod.array(zod.string()).optional(),
+  "upgradeNotes": zod.array(zod.string()).optional(),
+  "findings": zod.array(zod.object({
+  "category": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "sourceUrl": zod.string().nullish(),
+  "evidence": zod.string(),
+  "confident": zod.boolean()
+})).optional(),
+  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+}).nullish(),
+  "riskSummary": zod.object({
+  "affectedFiles": zod.number(),
+  "affectedUsages": zod.number(),
+  "high": zod.number(),
+  "medium": zod.number(),
+  "low": zod.number(),
+  "affectedApis": zod.array(zod.string()),
+  "affectedConfig": zod.array(zod.string()),
+  "affectedTests": zod.array(zod.string()),
+  "affectedBuildLint": zod.array(zod.string()),
+  "findings": zod.array(zod.object({
+  "filePath": zod.string(),
+  "line": zod.number(),
+  "usageType": zod.string(),
+  "symbol": zod.string(),
+  "matchedCode": zod.string(),
+  "reason": zod.string(),
+  "confidence": zod.string(),
+  "risk": zod.string()
+})).optional()
+}).nullish(),
+  "attempts": zod.array(zod.object({
+  "number": zod.number(),
+  "result": zod.string(),
+  "diagnosis": zod.string().nullable(),
+  "filesChanged": zod.number(),
+  "command": zod.string().nullish(),
+  "exitCode": zod.number().nullish(),
+  "stdout": zod.string().nullish(),
+  "stderr": zod.string().nullish(),
+  "filesInspected": zod.array(zod.string()).optional(),
+  "filesModified": zod.array(zod.string()).optional(),
+  "patch": zod.string().nullish()
+})).optional(),
+  "verificationCommands": zod.array(zod.object({
+  "command": zod.string(),
+  "status": zod.enum(['PASS', 'FAIL', 'SKIPPED', 'TIMEOUT']),
+  "exitCode": zod.number().nullable(),
+  "stdout": zod.string(),
+  "stderr": zod.string(),
+  "durationMs": zod.number()
+})).optional(),
+  "baseline": zod.object({
+  "result": zod.string(),
+  "tests": zod.string(),
+  "build": zod.string(),
+  "typecheck": zod.string(),
+  "lint": zod.string(),
+  "filesChanged": zod.number()
+}).nullish(),
+  "cancelled": zod.boolean().optional()
 })
 
 
@@ -495,7 +1161,92 @@ export const CancelMigrationResponse = zod.object({
 })).optional(),
   "agentSummary": zod.string().nullish(),
   "error": zod.string().nullish()
-}).nullish().describe('Public agent activity recorded by the coding agent.')
+}).nullish().describe('Public agent activity recorded by the coding agent.'),
+  "research": zod.object({
+  "dependency": zod.string(),
+  "currentVersion": zod.string(),
+  "targetVersion": zod.string(),
+  "sources": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "url": zod.string(),
+  "source_type": zod.string(),
+  "retrieved_at": zod.coerce.date(),
+  "status": zod.enum(['retrieved', 'unavailable']),
+  "reason": zod.string().nullish(),
+  "key_findings": zod.array(zod.string()),
+  "excerpt": zod.string()
+})),
+  "breakingChanges": zod.array(zod.string()).optional(),
+  "removedApis": zod.array(zod.string()).optional(),
+  "renamedApis": zod.array(zod.string()).optional(),
+  "changedApis": zod.array(zod.string()).optional(),
+  "configurationChanges": zod.array(zod.string()).optional(),
+  "importChanges": zod.array(zod.string()).optional(),
+  "compatibilityRequirements": zod.array(zod.string()).optional(),
+  "upgradeNotes": zod.array(zod.string()).optional(),
+  "findings": zod.array(zod.object({
+  "category": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "sourceUrl": zod.string().nullish(),
+  "evidence": zod.string(),
+  "confident": zod.boolean()
+})).optional(),
+  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+}).nullish(),
+  "riskSummary": zod.object({
+  "affectedFiles": zod.number(),
+  "affectedUsages": zod.number(),
+  "high": zod.number(),
+  "medium": zod.number(),
+  "low": zod.number(),
+  "affectedApis": zod.array(zod.string()),
+  "affectedConfig": zod.array(zod.string()),
+  "affectedTests": zod.array(zod.string()),
+  "affectedBuildLint": zod.array(zod.string()),
+  "findings": zod.array(zod.object({
+  "filePath": zod.string(),
+  "line": zod.number(),
+  "usageType": zod.string(),
+  "symbol": zod.string(),
+  "matchedCode": zod.string(),
+  "reason": zod.string(),
+  "confidence": zod.string(),
+  "risk": zod.string()
+})).optional()
+}).nullish(),
+  "attempts": zod.array(zod.object({
+  "number": zod.number(),
+  "result": zod.string(),
+  "diagnosis": zod.string().nullable(),
+  "filesChanged": zod.number(),
+  "command": zod.string().nullish(),
+  "exitCode": zod.number().nullish(),
+  "stdout": zod.string().nullish(),
+  "stderr": zod.string().nullish(),
+  "filesInspected": zod.array(zod.string()).optional(),
+  "filesModified": zod.array(zod.string()).optional(),
+  "patch": zod.string().nullish()
+})).optional(),
+  "verificationCommands": zod.array(zod.object({
+  "command": zod.string(),
+  "status": zod.enum(['PASS', 'FAIL', 'SKIPPED', 'TIMEOUT']),
+  "exitCode": zod.number().nullable(),
+  "stdout": zod.string(),
+  "stderr": zod.string(),
+  "durationMs": zod.number()
+})).optional(),
+  "baseline": zod.object({
+  "result": zod.string(),
+  "tests": zod.string(),
+  "build": zod.string(),
+  "typecheck": zod.string(),
+  "lint": zod.string(),
+  "filesChanged": zod.number()
+}).nullish(),
+  "cancelled": zod.boolean().optional()
 })
 
 

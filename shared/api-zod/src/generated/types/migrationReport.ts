@@ -6,9 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Attempt } from './attempt';
+import type { BaselineResult } from './baselineResult';
 import type { ImpactSummary } from './impactSummary';
+import type { MigrationPlan } from './migrationPlan';
+import type { MigrationReportApprovalStatus } from './migrationReportApprovalStatus';
+import type { MigrationResearch } from './migrationResearch';
 import type { RepositorySummary } from './repositorySummary';
 import type { ResearchSource } from './researchSource';
+import type { RiskSummary } from './riskSummary';
+import type { VerificationCommand } from './verificationCommand';
 
 export interface MigrationReport {
   migrationId: string;
@@ -20,4 +26,15 @@ export interface MigrationReport {
   changes: string[];
   attempts: Attempt[];
   remainingIssues: string[];
+  /** @nullable */
+  research?: MigrationResearch | null;
+  /** @nullable */
+  riskSummary?: RiskSummary | null;
+  affectedApiFindings?: string[];
+  /** @nullable */
+  plan?: MigrationPlan | null;
+  verificationCommands?: VerificationCommand[];
+  /** @nullable */
+  baseline?: BaselineResult | null;
+  approvalStatus?: MigrationReportApprovalStatus;
 }

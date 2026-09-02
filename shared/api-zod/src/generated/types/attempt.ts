@@ -12,4 +12,16 @@ export interface Attempt {
   /** @nullable */
   diagnosis: string | null;
   filesChanged: number;
+  /** @nullable */
+  command?: string | null;
+  /** @nullable */
+  exitCode?: number | null;
+  /** @nullable */
+  stdout?: string | null;
+  /** @nullable */
+  stderr?: string | null;
+  filesInspected?: string[];
+  filesModified?: string[];
+  /** @nullable */
+  patch?: string | null;
 }

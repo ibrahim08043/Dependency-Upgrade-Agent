@@ -19,6 +19,10 @@ export interface AgentContext {
   currentVersion: string;
   targetMajor: string;
   mode: "agentic" | "baseline";
+  /** Phase 2 — research/impact context passed to the agent so the plan is research-driven. */
+  researchSummary?: string;
+  impactSummary?: string;
+  riskSummary?: string;
 }
 
 export interface AgentRunResult {
@@ -53,6 +57,7 @@ Repository context:
 - Current version: {{currentVersion}}
 - Target major: {{targetMajor}}
 - Package manager: {{packageManager}}
+{{researchContext}}
 
 Workflow:
 1. Use read_package_json to confirm the current dependency and scripts.
@@ -77,11 +82,19 @@ Rules:
 - Keep tool inputs and outputs concise.`;
 
 function buildSystemPrompt(ctx: AgentContext, repository: ToolContext["repository"]): string {
+  const researchContext = [
+    ctx.researchSummary ? `Migration research findings:\n${ctx.researchSummary}` : "",
+    ctx.impactSummary ? `Repository impact analysis:\n${ctx.impactSummary}` : "",
+    ctx.riskSummary ? `Risk assessment:\n${ctx.riskSummary}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
   return SYSTEM_PROMPT_TEMPLATE
     .replaceAll("{{dependency}}", ctx.dependency)
     .replaceAll("{{currentVersion}}", ctx.currentVersion)
     .replaceAll("{{targetMajor}}", ctx.targetMajor)
-    .replaceAll("{{packageManager}}", repository.packageManager || "npm");
+    .replaceAll("{{packageManager}}", repository.packageManager || "npm")
+    .replaceAll("{{researchContext}}", researchContext ? `\n${researchContext}` : "");
 }
 
 function truncate(value: unknown, max = 180): string {
@@ -310,6 +323,14 @@ export async function runCodingAgent(
         breakingChanges: planRef.current.breakingChanges,
         plannedChanges: planRef.current.plannedChanges,
         validationCommands: planRef.current.verificationCommands,
+        migrationFindings: planRef.current.migrationFindings ?? [],
+        affectedApis: planRef.current.affectedApis ?? [],
+        riskAssessment: planRef.current.riskAssessment ?? [],
+        plannedPackageChanges: planRef.current.plannedPackageChanges ?? [],
+        plannedSourceChanges: planRef.current.plannedSourceChanges ?? [],
+        plannedConfigChanges: planRef.current.plannedConfigChanges ?? [],
+        potentialFailurePoints: planRef.current.potentialFailurePoints ?? [],
+        researchConfidence: planRef.current.researchConfidence,
       };
       migration.updatedAt = new Date().toISOString();
       await saveMigration(migration);

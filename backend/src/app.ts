@@ -51,4 +51,21 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
 
+// Express error handler: surface body-parser failures (e.g. oversized uploads)
+// as clean JSON instead of default HTML. Keeps the contract frontend-friendly.
+app.use(
+  (
+    error: { type?: string; status?: number; message?: string },
+    _req: express.Request,
+    res: express.Response,
+    next: express.NextFunction,
+  ) => {
+    if (error?.type === "entity.too.large" || error?.message?.toLowerCase().includes("too large")) {
+      res.status(413).json({ error: "FILE_TOO_LARGE: upload exceeds the 30 MB body limit" });
+      return;
+    }
+    next(error);
+  },
+);
+
 export default app;

@@ -135,6 +135,84 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
 
 
+export const getHealthCheckAliasUrl = () => {
+
+
+
+
+  return `/api/health`
+}
+
+/**
+ * Alias of /healthz
+ * @summary Health check (alias)
+ */
+export const healthCheckAlias = async ( options?: RequestInit): Promise<HealthStatus> => {
+
+  return customFetch<HealthStatus>(getHealthCheckAliasUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getHealthCheckAliasQueryKey = () => {
+    return [
+    `/api/health`
+    ] as const;
+    }
+
+
+export const getHealthCheckAliasQueryOptions = <TData = Awaited<ReturnType<typeof healthCheckAlias>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof healthCheckAlias>>, TError, TData>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getHealthCheckAliasQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof healthCheckAlias>>> = ({ signal }) => healthCheckAlias({ signal });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof healthCheckAlias>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type HealthCheckAliasQueryResult = NonNullable<Awaited<ReturnType<typeof healthCheckAlias>>>
+export type HealthCheckAliasQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Health check (alias)
+ */
+
+export function useHealthCheckAlias<TData = Awaited<ReturnType<typeof healthCheckAlias>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof healthCheckAlias>>, TError, TData>, }
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getHealthCheckAliasQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetDashboardUrl = () => {
 
 
@@ -982,6 +1060,80 @@ export const useApproveMigration = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getApproveMigrationMutationOptions(options));
+    }
+
+export const getRejectMigrationUrl = (id: string,) => {
+
+
+
+
+  return `/api/migrations/${id}/reject`
+}
+
+/**
+ * @summary Reject a completed migration
+ */
+export const rejectMigration = async (id: string, options?: RequestInit): Promise<Migration> => {
+
+  return customFetch<Migration>(getRejectMigrationUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRejectMigrationMutationKey = () => ['rejectMigration'] as const;
+
+export const getRejectMigrationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectMigration>>, TError,RejectMigrationMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof rejectMigration>>, TError,RejectMigrationMutationVariables, TContext> => {
+
+const mutationKey = getRejectMigrationMutationKey();
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rejectMigration>>, RejectMigrationMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  rejectMigration(id,)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RejectMigrationMutationResult = NonNullable<Awaited<ReturnType<typeof rejectMigration>>>
+
+    export type RejectMigrationMutationError = ErrorType<void>
+    export type RejectMigrationMutationVariables = {id: string}
+
+    /**
+ * @summary Reject a completed migration
+ */
+export const useRejectMigration = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectMigration>>, TError,RejectMigrationMutationVariables, TContext>, }
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rejectMigration>>,
+        TError,
+        RejectMigrationMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRejectMigrationMutationOptions(options));
     }
 
 export const getCancelMigrationUrl = (id: string,) => {

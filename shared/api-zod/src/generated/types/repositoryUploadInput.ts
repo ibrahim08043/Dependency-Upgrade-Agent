@@ -7,5 +7,6 @@
  */
 
 export interface RepositoryUploadInput {
-  file: string;
+  /** The ZIP archive of the repository to analyze. */
+  file: Blob;
 }

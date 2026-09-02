@@ -85,7 +85,16 @@ export async function listZipEntries(archivePath: string): Promise<string[]> {
 export async function extractArchive(archivePath: string, destination: string): Promise<ArchiveEngine> {
   const engine = await findEngine();
   if (engine === "unzip") {
-    await execFileAsync("unzip", ["-q", archivePath, "-d", destination], { timeout: 120_000 });
+    try {
+      await execFileAsync("unzip", ["-q", archivePath, "-d", destination], { timeout: 120_000 });
+    } catch (error) {
+      // Info-ZIP exits 1 on warnings (e.g. backslash path separators in
+      // PowerShell-created ZIPs) even though files ARE extracted.  Verify
+      // the destination was populated before re-throwing.
+      const extracted = await readdir(destination).catch(() => []);
+      if (extracted.length === 0) throw error;
+      // Files exist — the warning is non-fatal.
+    }
     return "unzip";
   }
   if (engine === "tar") {
