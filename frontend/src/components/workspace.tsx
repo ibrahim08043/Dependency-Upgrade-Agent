@@ -12,6 +12,7 @@ import {
 } from '@dua/api-client-react';
 import { ErrorState, StatusPill, formatDate, statusLabel, SummaryCard, ConfChip, ResearchGroup, Patch } from './shared';
 import { stages } from './dashboard';
+import { AgentTimeline } from './agent-timeline';
 
 /* ── Stage Track ────────────────────────────────────────────────────────────── */
 
@@ -188,10 +189,12 @@ function PlanSection({ plan }: { plan: Migration['plan'] }) {
         </div>
       </div>
     )}
-    {plan.riskAssessment && (
+    {plan.riskAssessment && plan.riskAssessment.length > 0 && (
       <div style={{ marginBottom: 16 }}>
         <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: 8 }}>Risk assessment</h3>
-        <p style={{ fontSize: '0.85rem', lineHeight: 1.6 }}>{plan.riskAssessment}</p>
+        <ul style={{ fontSize: '0.85rem', lineHeight: 1.6, margin: 0, paddingLeft: 20 }}>
+          {plan.riskAssessment.map((risk, i) => <li key={i}>{risk}</li>)}
+        </ul>
       </div>
     )}
   </section>;
@@ -228,21 +231,35 @@ function AiStagesSection({ aiStages }: { aiStages: Migration['aiStages'] }) {
 
 function AttemptsTimeline({ attempts, cancelled }: { attempts: Migration['attempts']; cancelled?: boolean }) {
   if (!attempts || attempts.length === 0) return null;
+  const totalAttempts = attempts.length;
+  const passAttempt = attempts.find((a) => a.result === 'PASS');
+  const lastAttempt = attempts[attempts.length - 1];
+  const selfHealed = totalAttempts > 1 && passAttempt;
   return <section className="card report-card" data-testid="section-attempts">
-    <div className="panel-head"><div><h2>Attempts</h2><p>{cancelled ? 'Run cancelled by user' : 'Self-healing verification attempts'}</p></div></div>
+    <div className="panel-head"><div><h2>Verification attempts</h2><p>{cancelled ? 'Run cancelled by user' : selfHealed ? `Self-healing succeeded after ${totalAttempts} attempt${totalAttempts > 1 ? 's' : ''}` : totalAttempts > 1 ? `${totalAttempts} attempts — final: ${lastAttempt?.result}` : 'Single verification pass'}</p></div></div>
     <div className="attempts-list">
-      {attempts.map((attempt) => (
-        <div className="attempt" key={attempt.number} data-testid={`attempt-${attempt.number}`}>
+      {attempts.map((attempt, idx) => {
+        const isFirst = idx === 0;
+        const isLast = idx === attempts.length - 1;
+        const wasRepaired = !isFirst && attempt.patchResult === 'applied';
+        const repairFailed = !isFirst && attempt.patchResult === 'failed';
+        const wasSkipped = !isFirst && attempt.patchResult === 'skipped';
+        return <div className={`attempt ${attempt.result === 'PASS' ? 'attempt-pass' : 'attempt-fail'}`} key={attempt.number} data-testid={`attempt-${attempt.number}`}>
           <span className="attempt-num">{attempt.number}</span>
-          <span>
-            <strong className={attempt.result === 'PASS' ? 'add-text' : 'del-text'}>{attempt.result}</strong>
-            {attempt.failureType ? <small style={{ display: 'block', color: 'hsl(var(--muted-foreground))', marginTop: 2 }}>{attempt.failureType}</small> : null}
-            {attempt.diagnosis ? <small style={{ display: 'block', color: 'hsl(var(--muted-foreground))', marginTop: 3 }}>{attempt.diagnosis}</small> : null}
+          <span style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <strong className={attempt.result === 'PASS' ? 'add-text' : 'del-text'}>{attempt.result}</strong>
+              {isFirst ? <small style={{ color: 'hsl(var(--muted-foreground))' }}>initial verification</small> : wasRepaired ? <small style={{ color: 'hsl(var(--ok))' }}>after corrective patch</small> : repairFailed ? <small style={{ color: 'hsl(var(--destructive))' }}>repair failed</small> : wasSkipped ? <small style={{ color: 'hsl(var(--muted-foreground))' }}>repair skipped</small> : null}
+            </div>
+            {attempt.failureType ? <div className="attempt-failure-type" style={{ marginTop: 4 }}><span className="event-error-badge">{attempt.failureType}</span></div> : null}
+            {attempt.diagnosis ? <div style={{ marginTop: 6, padding: '8px 10px', background: 'hsl(var(--muted) / .5)', borderRadius: 4, fontSize: 11, lineHeight: 1.5 }}>{attempt.diagnosis}</div> : null}
+            {attempt.command ? <div style={{ marginTop: 6, fontFamily: 'var(--app-font-mono)', fontSize: 10, color: 'hsl(var(--muted-foreground))' }}>Failed command: {attempt.command} (exit {attempt.exitCode})</div> : null}
+            {attempt.filesModified && attempt.filesModified.length > 0 ? <div style={{ marginTop: 4, fontSize: 10, color: 'hsl(var(--muted-foreground))' }}>Modified: {attempt.filesModified.join(', ')}</div> : null}
             {attempt.patch ? <details style={{ marginTop: 6 }}><summary style={{ fontFamily: 'var(--app-font-mono)', fontSize: 10 }}>Corrective patch</summary><pre className="impact-code">{attempt.patch}</pre></details> : null}
           </span>
           <span className="file-meta">{attempt.filesChanged} files</span>
-        </div>
-      ))}
+        </div>;
+      })}
     </div>
   </section>;
 }
@@ -301,5 +318,5 @@ export function Workspace() {
   const refreshAll = () => { void migration.refetch(); void events.refetch(); };
   if (migration.isLoading) return <LoadingWorkspace />;
   if (migration.isError || !m) return <div className="page"><ErrorState message="This migration run is not available." retry={refreshAll} /></div>;
-  return <div className="page"><div className="workspace-head"><div><div className="eyebrow">Migration workspace <span className="migration-id">#{m.id}</span></div><div className="migration-title"><h1>{m.dependency}</h1><StatusPill status={m.status} /></div><div className="migration-sub"><b>{m.repositoryName}</b> · {m.oldVersion} <ArrowRight size={12} style={{ verticalAlign: 'middle' }} /> {m.targetVersion} · attempt {m.attemptNumber}</div></div><div className="workspace-actions"><button className="btn btn-quiet" onClick={refreshAll} disabled={migration.isFetching} data-testid="button-refresh-workspace"><RefreshCw className={migration.isFetching ? 'animate-spin' : ''} /> Refresh</button>{(m.status === 'running' || m.status === 'queued') ? <button className="btn btn-danger" onClick={() => { cancel.mutate({ id }); }} disabled={cancel.isPending} data-testid="button-cancel-migration">{cancel.isPending ? <Loader2 className="animate-spin" /> : <XCircle />} Cancel run</button> : null}</div></div><StageTrack current={m.currentStage} status={m.status} /><WorkspaceNav id={id} active="workspace" /><div className="workspace-grid"><section className="card event-panel"><div className="panel-head"><div><h2>Agent event log</h2><p>Live backend events · refreshes every 4.5 seconds</p></div><span className="top-status"><span className={`pulse ${m.status === 'failed' ? 'danger-pulse' : ''}`} /> {m.status === 'running' ? 'streaming' : 'synced'}</span></div>{eventRows.length === 0 ? <div className="empty" data-testid="state-empty-events"><div className="empty-icon"><Terminal /></div><h3>Waiting for events</h3><p>The backend has not emitted an event for this run yet.</p></div> : <EventLog rows={eventRows} />}</section><div className="summary-stack">{m.agentState ? <SummaryCard title="Agent activity" icon={<Terminal />}><AgentActivity agent={m.agentState} /></SummaryCard> : null}<SummaryCard title="Impact" icon={<Code2 />}><div className="summary-stats"><div className="summary-stat"><span>Affected files</span><strong>{m.affectedFiles}</strong></div><div className="summary-stat"><span>Usages</span><strong>{m.affectedUsages}</strong></div>{m.riskSummary ? <div className="summary-stat"><span>High risk</span><strong style={{ color: 'hsl(var(--destructive))' }}>{m.riskSummary.high}</strong></div> : null}{m.riskSummary ? <div className="summary-stat"><span>Medium risk</span><strong style={{ color: 'hsl(var(--primary))' }}>{m.riskSummary.medium}</strong></div> : null}</div></SummaryCard><SummaryCard title="Verification" icon={<ShieldCheck />}><Checks migration={m} /></SummaryCard><SummaryCard title="Artifacts" icon={<ScrollText />}><p className="helper">Inspect the actual patch and final report as soon as the agent makes them available.</p><div className="link-row"><Link href={`/migration/${id}/diff`} className="btn btn-secondary" data-testid="link-view-diff"><FileCode2 /> Diff</Link><Link href={`/migration/${id}/report`} className="btn btn-secondary" data-testid="link-view-report"><ScrollText /> Report</Link></div></SummaryCard></div></div><div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 18 }}><ResearchSection research={m.research ?? null} /><ImpactMap risk={m.riskSummary ?? null} /><PlanSection plan={m.plan ?? null} /><AiStagesSection aiStages={m.aiStages ?? []} /><AttemptsTimeline attempts={m.attempts ?? []} cancelled={m.cancelled} /><VerificationPanel commands={m.verificationCommands ?? []} />{m.baseline ? <section className="card report-card"><h2>Baseline mode result</h2><div className="checks">{[['Tests', m.baseline.tests], ['Build', m.baseline.build], ['Typecheck', m.baseline.typecheck], ['Lint', m.baseline.lint]].map(([label, value]) => <div className="check" key={label as string}><span>{label}</span><strong className={value as string}>{statusLabel(value as string)}</strong></div>)}</div><p className="helper" style={{ marginTop: 10 }}>Baseline result: <strong>{m.baseline.result}</strong> · {m.baseline.filesChanged} files changed.</p></section> : null}<HistorySection repositoryId={m.repositoryId} currentId={m.id} /></div></div>;
+  return <div className="page"><div className="workspace-head"><div><div className="eyebrow">Migration workspace <span className="migration-id">#{m.id}</span></div><div className="migration-title"><h1>{m.dependency}</h1><StatusPill status={m.status} /></div><div className="migration-sub"><b>{m.repositoryName}</b> · {m.oldVersion} <ArrowRight size={12} style={{ verticalAlign: 'middle' }} /> {m.targetVersion} · attempt {m.attemptNumber}</div></div><div className="workspace-actions"><button className="btn btn-quiet" onClick={refreshAll} disabled={migration.isFetching} data-testid="button-refresh-workspace"><RefreshCw className={migration.isFetching ? 'animate-spin' : ''} /> Refresh</button>{(m.status === 'running' || m.status === 'queued') ? <button className="btn btn-danger" onClick={() => { cancel.mutate({ id }); }} disabled={cancel.isPending} data-testid="button-cancel-migration">{cancel.isPending ? <Loader2 className="animate-spin" /> : <XCircle />} Cancel run</button> : null}</div></div><StageTrack current={m.currentStage} status={m.status} /><WorkspaceNav id={id} active="workspace" /><div className="workspace-grid"><section className="card event-panel"><div className="panel-head"><div><h2>Agent activity</h2><p>Live backend events · refreshes every 4.5 seconds</p></div><span className="top-status"><span className={`pulse ${m.status === 'failed' ? 'danger-pulse' : ''}`} /> {m.status === 'running' ? 'streaming' : 'synced'}</span></div>{eventRows.length === 0 && !m.agentState ? <div className="empty" data-testid="state-empty-events"><div className="empty-icon"><Terminal /></div><h3>Waiting for events</h3><p>The backend has not emitted an event for this run yet.</p></div> : <AgentTimeline events={eventRows} migration={m} />}</section><div className="summary-stack">{m.agentState ? <SummaryCard title="Agent activity" icon={<Terminal />}><AgentActivity agent={m.agentState} /></SummaryCard> : null}<SummaryCard title="Impact" icon={<Code2 />}><div className="summary-stats"><div className="summary-stat"><span>Affected files</span><strong>{m.affectedFiles}</strong></div><div className="summary-stat"><span>Usages</span><strong>{m.affectedUsages}</strong></div>{m.riskSummary ? <div className="summary-stat"><span>High risk</span><strong style={{ color: 'hsl(var(--destructive))' }}>{m.riskSummary.high}</strong></div> : null}{m.riskSummary ? <div className="summary-stat"><span>Medium risk</span><strong style={{ color: 'hsl(var(--primary))' }}>{m.riskSummary.medium}</strong></div> : null}</div></SummaryCard><SummaryCard title="Verification" icon={<ShieldCheck />}><Checks migration={m} /></SummaryCard><SummaryCard title="Artifacts" icon={<ScrollText />}><p className="helper">Inspect the actual patch and final report as soon as the agent makes them available.</p><div className="link-row"><Link href={`/migration/${id}/diff`} className="btn btn-secondary" data-testid="link-view-diff"><FileCode2 /> Diff</Link><Link href={`/migration/${id}/report`} className="btn btn-secondary" data-testid="link-view-report"><ScrollText /> Report</Link></div></SummaryCard></div></div><div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 18 }}><ResearchSection research={m.research ?? null} /><ImpactMap risk={m.riskSummary ?? null} /><PlanSection plan={m.plan ?? null} /><AiStagesSection aiStages={m.aiStages ?? []} /><AttemptsTimeline attempts={m.attempts ?? []} cancelled={m.cancelled} /><VerificationPanel commands={m.verificationCommands ?? []} />{m.baseline ? <section className="card report-card"><h2>Baseline mode result</h2><div className="checks">{[['Tests', m.baseline.tests], ['Build', m.baseline.build], ['Typecheck', m.baseline.typecheck], ['Lint', m.baseline.lint]].map(([label, value]) => <div className="check" key={label as string}><span>{label}</span><strong className={value as string}>{statusLabel(value as string)}</strong></div>)}</div><p className="helper" style={{ marginTop: 10 }}>Baseline result: <strong>{m.baseline.result}</strong> · {m.baseline.filesChanged} files changed.</p></section> : null}<HistorySection repositoryId={m.repositoryId} currentId={m.id} /></div></div>;
 }

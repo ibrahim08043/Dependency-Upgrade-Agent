@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install backend dependencies
+        run: cd backend && npm install
+      - name: Install shared packages
+        run: cd shared/api-zod && npm install
+      - name: Typecheck
+        run: cd backend && npm run typecheck
+      - name: Tests
+        run: cd backend && node --import tsx --test --test-concurrency=1 tests/zip-security.test.ts tests/heal.test.ts tests/tools.test.ts tests/state.test.ts tests/phase5-hardening.test.ts tests/phase6-observability.test.ts
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install shared packages
+        run: cd shared/api-client-react && npm install
+      - name: Install frontend dependencies
+        run: cd frontend && npm install
+      - name: Typecheck
+        run: cd frontend && npm run typecheck
+      - name: Production build
+        run: cd frontend && npm run build

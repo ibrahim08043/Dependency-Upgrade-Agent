@@ -7,7 +7,7 @@ import { captureDiff } from "./git";
 import { getGrokProvider, isProviderConfigured } from "../services/ai/provider";
 import { isProviderQuotaExhausted } from "../services/ai/gemini";
 import { runCodingAgent } from "../agents/coding-agent";
-import { extractZipToWorkspace } from "./zip";
+import { extractZipToWorkspace, removeWorkspace } from "./zip";
 import {
   addEvent,
   createMigration,
@@ -15,6 +15,7 @@ import {
   getRepository,
   saveMigration,
   type AiStageRecord,
+  type MigrationEvent,
   type MigrationRecord,
   type PackageManager,
   type RepositoryRecord,
@@ -291,6 +292,10 @@ async function verifyMigration(
         timestamp: new Date().toISOString(),
         level: "warning",
         message: `${script}: SKIPPED — no ${script} script found`,
+        stage: "verify",
+        eventType: "command_skip",
+        command: `${manager} run ${script}`,
+        durationMs: 0,
       }).catch(() => undefined);
       return "skipped";
     }
@@ -318,6 +323,12 @@ async function verifyMigration(
       timestamp: new Date().toISOString(),
       level: result.code === 0 ? "success" : "error",
       message: `${manager} run ${script} ${result.code === 0 ? "passed" : isTimeout ? "timed out" : "failed"} (${result.durationMs}ms)`,
+      stage: "verify",
+      eventType: result.code === 0 ? "command_pass" : "command_fail",
+      command: `${manager} run ${script}`,
+      durationMs: result.durationMs || scriptDuration,
+      exitCode: result.code,
+      filesAffected: result.code !== 0 ? migration.agentState?.filesModified : undefined,
     }).catch(() => undefined);
     if (result.code !== 0) {
       const issue = `${script}: ${(result.stderr || result.stdout).slice(0, 1000)}`;
@@ -363,15 +374,15 @@ export async function runMigration(migrationId: string): Promise<void> {
   if (!migration) return;
   const repository = await getRepository(migration.repositoryId);
   if (!repository) return;
-  const update = async (stage: string, message: string, level: "info" | "success" | "warning" | "error" = "info") => {
+  const update = async (stage: string, message: string, level: "info" | "success" | "warning" | "error" = "info", extra?: Partial<MigrationEvent>) => {
     migration.currentStage = stage;
     migration.updatedAt = new Date().toISOString();
     await saveMigration(migration);
-    await addEvent({ id: randomUUID(), migrationId, timestamp: new Date().toISOString(), level, message });
+    await addEvent({ id: randomUUID(), migrationId, timestamp: new Date().toISOString(), level, message, stage, eventType: "stage_transition", ...extra });
   };
 
-  const emitAgentEvent = async (level: "info" | "success" | "warning" | "error", message: string) => {
-    await addEvent({ id: randomUUID(), migrationId, timestamp: new Date().toISOString(), level, message });
+  const emitAgentEvent = async (level: "info" | "success" | "warning" | "error", message: string, extra?: Partial<MigrationEvent>) => {
+    await addEvent({ id: randomUUID(), migrationId, timestamp: new Date().toISOString(), level, message, stage: migration.currentStage, ...extra });
     logger.info({ migrationId, level, message }, "Agent event");
   };
 
@@ -409,7 +420,7 @@ export async function runMigration(migrationId: string): Promise<void> {
 
     // ---- Phase 2: REAL migration research (documentation retrieval + synthesis) ----
     await update("research", "Starting migration research");
-    await addEvent({ id: randomUUID(), migrationId, timestamp: new Date().toISOString(), level: "info", message: "Searching official documentation" });
+    await addEvent({ id: randomUUID(), migrationId, timestamp: new Date().toISOString(), level: "info", message: "Searching official documentation", stage: "research", eventType: "research_start" });
 
     let research: import("./research-types").MigrationResearch;
     const currentMajor = (migration.oldVersion.match(/\d+/) ?? ["0"])[0];
@@ -513,7 +524,7 @@ export async function runMigration(migrationId: string): Promise<void> {
 
     // ---- Phase 2: repository-aware impact analysis + research correlation ----
     await update("impact-analysis", "Starting impact analysis");
-    await addEvent({ id: randomUUID(), migrationId, timestamp: new Date().toISOString(), level: "info", message: "Scanning repository for dependency usage" });
+    await addEvent({ id: randomUUID(), migrationId, timestamp: new Date().toISOString(), level: "info", message: "Scanning repository for dependency usage", stage: "impact-analysis", eventType: "impact_scan_start", tool: "scan_repository_usage" });
 
     const scan = await scanRepositoryUsage(repository.rootPath, migration.dependency);
     const riskResult = applyRiskToFindings({ findings: scan.codeFindings, research });
@@ -886,7 +897,7 @@ export async function runMigration(migrationId: string): Promise<void> {
     while (migration.mode !== "baseline" && !passed && migration.attemptNumber < MAX_HEAL_ATTEMPTS && !isCancelled()) {
       const currentProvider = healProvider();
       if (currentProvider && isProviderQuotaExhausted(currentProvider)) {
-        await emitAgentEvent("warning", "Skipping self-healing — Gemini quota exhausted");
+        await emitAgentEvent("warning", "Skipping self-healing — Gemini quota exhausted", { eventType: "self_heal_skip", errorCategory: "QUOTA_ERROR", attemptNumber: migration.attemptNumber + 1 });
         if (!migration.remainingIssues.includes("Gemini quota exhausted — self-healing skipped")) {
           migration.remainingIssues.push("Gemini quota exhausted — self-healing skipped");
         }
@@ -894,7 +905,7 @@ export async function runMigration(migrationId: string): Promise<void> {
       }
       healRounds += 1;
       await update("heal", `Verification failed — diagnosing (attempt ${migration.attemptNumber + 1})`);
-      await emitAgentEvent("info", "Sending failure to Grok for diagnosis");
+      await emitAgentEvent("info", "Sending failure to Grok for diagnosis", { eventType: "diagnosis_start", attemptNumber: migration.attemptNumber + 1 });
 
       let diagnosis = "Verification failed; see command output.";
       let diagnosisOk = false;
@@ -933,11 +944,11 @@ export async function runMigration(migrationId: string): Promise<void> {
         if (!migration.remainingIssues.includes(short)) migration.remainingIssues.push(short);
         diagnosis = `Automatic diagnosis unavailable (${msg.slice(0, 120)}). Repairing based on failed command output.`;
       }
-      await emitAgentEvent("info", `Diagnosis: ${diagnosis.slice(0, 300)}`);
+      await emitAgentEvent("info", `Diagnosis: ${diagnosis.slice(0, 300)}`, { eventType: "diagnosis_result", attemptNumber: migration.attemptNumber + 1 });
 
       // Corrective repair pass — reuse the live migration state + coding agent.
       await update("heal", `Applying corrective patch (attempt ${migration.attemptNumber + 1})`);
-      await emitAgentEvent("info", "Corrective patch generation in progress");
+      await emitAgentEvent("info", "Corrective patch generation in progress", { eventType: "repair_start", attemptNumber: migration.attemptNumber + 1 });
 
       const repairProvider = healProvider();
       if (repairProvider) {
@@ -987,6 +998,7 @@ export async function runMigration(migrationId: string): Promise<void> {
       }
 
       await update("heal", `Retrying verification (attempt ${migration.attemptNumber + 1})`);
+      await emitAgentEvent("info", `Retrying verification — attempt ${migration.attemptNumber + 1}`, { eventType: "verify_retry", attemptNumber: migration.attemptNumber + 1 });
       migration.agentState = (await refreshedMigration()).agentState ?? migration.agentState;
       failed = await verifyMigration(migration, repository.rootPath, repository);
       await runCommand("git", ["add", "-N", "."], { cwd: repository.rootPath });
@@ -1029,6 +1041,14 @@ export async function runMigration(migrationId: string): Promise<void> {
     migration.remainingIssues.push(String(error).slice(0, 1800));
     await update("failed", String(error).slice(0, 1800), "error");
     logger.error({ err: error, migrationId }, "Migration failed");
+  } finally {
+    // Cleanup temp workspace to prevent disk accumulation.
+    // Only cleans paths under the temp directory (safety check in removeWorkspace).
+    if (repository?.rootPath) {
+      await removeWorkspace(repository.rootPath).catch((err) => {
+        logger.warn({ err, migrationId }, "Failed to clean up workspace");
+      });
+    }
   }
 }
 

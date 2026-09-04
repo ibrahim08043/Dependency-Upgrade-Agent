@@ -477,6 +477,28 @@ export interface MigrationEvent {
   timestamp: string;
   level: MigrationEventLevel;
   message: string;
+  /** Pipeline stage when this event was emitted. */
+  stage?: string;
+  /** Semantic event type for UI rendering. */
+  eventType?: string;
+  /** Tool name when the event relates to a tool call. */
+  tool?: string;
+  /** Sanitized tool input summary (truncated, no secrets). */
+  toolArgs?: string;
+  /** Sanitized tool result summary (truncated, no secrets). */
+  toolResult?: string;
+  /** Duration in milliseconds for timed operations. */
+  durationMs?: number;
+  /** Files affected by this event's operation. */
+  filesAffected?: string[];
+  /** Command that was executed (for run_command / verification events). */
+  command?: string;
+  /** Machine-readable error category. */
+  errorCategory?: string;
+  /** Self-healing attempt number (1-based). */
+  attemptNumber?: number;
+  /** Exit code for command execution events. */
+  exitCode?: number;
 }
 
 export type DiffFileStatus = typeof DiffFileStatus[keyof typeof DiffFileStatus];
@@ -552,6 +574,8 @@ export interface MigrationReport {
   verificationCommands?: VerificationCommand[];
   /** @nullable */
   baseline?: BaselineResult | null;
+  /** @nullable */
+  agentState?: MigrationAgentState | null;
   aiStages?: AiStage[];
   approvalStatus?: MigrationReportApprovalStatus;
 }

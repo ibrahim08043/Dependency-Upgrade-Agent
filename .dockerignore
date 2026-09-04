@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+dist
+**/dist
+**/.data
+**/.env
+**/.env.*
+*.log
+.git
+.github
+.vscode
+.idea
+*.md
+!shared/*/package.json

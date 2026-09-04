@@ -1,5 +1,5 @@
 import { useParams, Link } from 'wouter';
-import { ArrowLeft, CheckCircle2, Loader2, XCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, FileCode2, Loader2, ScrollText, Terminal, XCircle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   getGetMigrationQueryKey, getGetMigrationReportQueryKey, useApproveMigration, useGetMigration,
@@ -146,6 +146,65 @@ function VerificationPanel({ commands }: { commands: MigrationReport['verificati
   </section>;
 }
 
+/* ── Migration Summary ─────────────────────────────────────────────────────── */
+
+function MigrationSummary({ report }: { report: MigrationReport }) {
+  const totalAttempts = report.attempts?.length ?? 0;
+  const passAttempt = report.attempts?.find((a) => a.result === 'PASS');
+  const selfHealed = totalAttempts > 1 && Boolean(passAttempt);
+  const verificationPassed = report.status === 'completed' || report.status === 'approved';
+  const patchesApplied = report.agentState?.patchesApplied ?? 0;
+  const filesModified = report.agentState?.filesModified ?? [];
+  const agentSummary = report.agentState?.agentSummary;
+
+  return <section className="card report-card" data-testid="section-migration-summary">
+    <div className="panel-head"><div><h2>Migration summary</h2><p>Quick overview of what happened</p></div></div>
+    <div className="summary-stats" style={{ marginBottom: 12 }}>
+      <div className="summary-stat"><span>Dependency</span><strong>{report.repository.name}</strong></div>
+      <div className="summary-stat"><span>Files touched</span><strong>{report.impact.affectedFiles}</strong></div>
+      <div className="summary-stat"><span>Usages</span><strong>{report.impact.affectedUsages}</strong></div>
+      <div className="summary-stat"><span>Patches</span><strong>{patchesApplied}</strong></div>
+      <div className="summary-stat"><span>Verification</span><strong className={verificationPassed ? 'add-text' : 'del-text'}>{verificationPassed ? 'Passed' : 'Failed'}</strong></div>
+      {selfHealed ? <div className="summary-stat"><span>Self-healing</span><strong style={{ color: 'hsl(var(--ok))' }}>Applied ({totalAttempts} attempts)</strong></div> : null}
+      {report.status === 'failed' && totalAttempts > 1 ? <div className="summary-stat"><span>Self-healing</span><strong style={{ color: 'hsl(var(--destructive))' }}>Exhausted ({totalAttempts} attempts)</strong></div> : null}
+    </div>
+    {report.changes.length > 0 ? <div style={{ marginBottom: 12 }}><h3 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: 6 }}>What changed</h3><ul style={{ fontSize: '0.85rem', lineHeight: 1.6, paddingLeft: 20 }}>{report.changes.map((c, i) => <li key={i}>{c}</li>)}</ul></div> : null}
+    {filesModified.length > 0 ? <div style={{ marginBottom: 12 }}><h3 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: 6 }}>Files modified ({filesModified.length})</h3><ul style={{ fontSize: '0.85rem', lineHeight: 1.6, paddingLeft: 20, fontFamily: 'var(--app-font-mono)' }}>{filesModified.map((f) => <li key={f}>{f}</li>)}</ul></div> : null}
+    {agentSummary ? <div style={{ marginBottom: 12 }}><h3 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: 6 }}>Agent conclusion</h3><p style={{ fontSize: '0.85rem', lineHeight: 1.6 }}>{agentSummary}</p></div> : null}
+    {report.remainingIssues.length > 0 ? <div style={{ padding: '10px 12px', border: '1px solid hsl(var(--destructive) / .2)', borderRadius: 6, background: 'hsl(var(--destructive) / .05)' }}><h3 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: 6, color: 'hsl(var(--destructive))' }}>Remaining issues ({report.remainingIssues.length})</h3><ul style={{ fontSize: '0.85rem', lineHeight: 1.6, paddingLeft: 20 }}>{report.remainingIssues.map((issue, i) => <li key={i}>{issue}</li>)}</ul></div> : null}
+  </section>;
+}
+
+/* ── Error Recovery UX ─────────────────────────────────────────────────────── */
+
+function ErrorRecoveryUX({ report }: { report: MigrationReport }) {
+  const status = report.approvalStatus ?? report.status;
+  if (status === 'APPROVED' || status === 'REJECTED') return null;
+
+  const actions: Array<{ label: string; href: string; icon: typeof Terminal; tone: 'primary' | 'secondary' }> = [];
+  if (status === 'PENDING') {
+    actions.push({ label: 'Review diff', href: `/migration/${report.migrationId}/diff`, icon: FileCode2, tone: 'primary' });
+    actions.push({ label: 'View workspace', href: `/migration/${report.migrationId}`, icon: Terminal, tone: 'secondary' });
+  } else if (report.status === 'failed') {
+    actions.push({ label: 'Inspect agent activity', href: `/migration/${report.migrationId}`, icon: Terminal, tone: 'primary' });
+    actions.push({ label: 'Review diff', href: `/migration/${report.migrationId}/diff`, icon: FileCode2, tone: 'secondary' });
+    actions.push({ label: 'Start new migration', href: '/new', icon: ArrowRight, tone: 'secondary' });
+  } else if (report.status === 'running' || report.status === 'queued') {
+    actions.push({ label: 'Watch progress', href: `/migration/${report.migrationId}`, icon: Terminal, tone: 'primary' });
+  }
+
+  if (actions.length === 0) return null;
+  return <section className="card report-card" data-testid="section-next-steps">
+    <div className="panel-head"><div><h2>Next steps</h2><p>What you can do now</p></div></div>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      {actions.map((a) => {
+        const Icon = a.icon;
+        return <Link key={a.label} href={a.href} className={`btn btn-${a.tone}`}><Icon size={14} /> {a.label}</Link>;
+      })}
+    </div>
+  </section>;
+}
+
 /* ── Migration Frame ────────────────────────────────────────────────────────── */
 
 function MigrationFrame({ children, active }: { children: React.ReactNode; active: 'workspace' | 'diff' | 'report' }) {
@@ -162,7 +221,7 @@ function MigrationFrame({ children, active }: { children: React.ReactNode; activ
 function ReportContent({ report, approve, reject, approving, rejecting }: { report: MigrationReport; approve: () => void; reject: () => void; approving: boolean; rejecting: boolean }) {
   const status = report.approvalStatus ?? report.status;
   const isDone = status === 'APPROVED' || status === 'REJECTED';
-  return <div className="report-grid"><div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}><section className="card report-card"><div className="eyebrow">Agent conclusion</div><h2 style={{ marginTop: 7 }}>{report.status}</h2><p className="report-summary">{report.summary}</p></section><section className="card report-card"><h2>Changes made</h2>{report.changes.length === 0 ? <p className="helper">No change notes were returned.</p> : <ul className="report-list">{report.changes.map((change, index) => <li key={`${change}-${index}`} data-testid={`change-${index}`}>{change}</li>)}</ul>}</section><section className="card report-card"><h2>Research sources</h2>{report.sources.length === 0 ? <p className="helper">No external sources were recorded for this run.</p> : report.sources.map((source, index) => <div className="source" key={`${source.url}-${index}`}><a href={source.url} target="_blank" rel="noreferrer" data-testid={`link-source-${index}`}>{source.title}</a><p>{source.finding}</p></div>)}</section><ResearchSection research={report.research ?? null} /><ImpactMap risk={report.riskSummary ?? null} /><PlanSection plan={report.plan ?? null} /><AiStagesSection aiStages={report.aiStages ?? []} /></div><div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}><section className="card report-card"><h2>Impact summary</h2><div className="summary-stats"><div className="summary-stat"><span>Files touched</span><strong>{report.impact.affectedFiles}</strong></div><div className="summary-stat"><span>Usages</span><strong>{report.impact.affectedUsages}</strong></div></div>{report.impact.files.length > 0 ? <ul className="report-list">{report.impact.files.map((file) => <li key={file}>{file}</li>)}</ul> : null}</section><AttemptsTimeline attempts={report.attempts ?? []} /><VerificationPanel commands={report.verificationCommands ?? []} />{report.baseline ? <section className="card report-card"><h2>Baseline result</h2><div className="checks">{[['Tests', report.baseline.tests], ['Build', report.baseline.build], ['Typecheck', report.baseline.typecheck], ['Lint', report.baseline.lint]].map(([label, value]) => <div className="check" key={label as string}><span>{label}</span><strong className={value as string}>{statusLabel(value as string)}</strong></div>)}</div><p className="helper" style={{ marginTop: 8 }}>Result: <strong>{report.baseline.result}</strong> · {report.baseline.filesChanged} files changed.</p></section> : null}<section className="approval"><h3>Approval gate · {status}</h3><p>Review the diff and verification checks before accepting this migration into your repository workflow.</p><div className="approval-actions"><button className="btn btn-primary" onClick={approve} disabled={approving || isDone} data-testid="button-approve-migration">{approving ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} {status === 'APPROVED' ? 'Approved' : 'Approve migration'}</button><button className="btn btn-danger" onClick={reject} disabled={rejecting || isDone} data-testid="button-reject-migration">{rejecting ? <Loader2 className="animate-spin" /> : <XCircle />} {status === 'REJECTED' ? 'Rejected' : 'Reject'}</button></div></section>{report.remainingIssues.length > 0 ? <section className="card report-card"><h2>Remaining issues</h2><ul className="report-list">{report.remainingIssues.map((issue, index) => <li key={`${issue}-${index}`}>{issue}</li>)}</ul></section> : null}</div></div>;
+  return <div className="report-grid"><div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}><MigrationSummary report={report} /><section className="card report-card"><div className="eyebrow">Agent conclusion</div><h2 style={{ marginTop: 7 }}>{report.status}</h2><p className="report-summary">{report.summary}</p></section><ResearchSection research={report.research ?? null} /><ImpactMap risk={report.riskSummary ?? null} /><PlanSection plan={report.plan ?? null} /><AiStagesSection aiStages={report.aiStages ?? []} /></div><div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}><section className="card report-card"><h2>Changes made</h2>{report.changes.length === 0 ? <p className="helper">No change notes were returned.</p> : <ul className="report-list">{report.changes.map((change, index) => <li key={`${change}-${index}`} data-testid={`change-${index}`}>{change}</li>)}</ul>}</section><AttemptsTimeline attempts={report.attempts ?? []} /><VerificationPanel commands={report.verificationCommands ?? []} />{report.baseline ? <section className="card report-card"><h2>Baseline result</h2><div className="checks">{[['Tests', report.baseline.tests], ['Build', report.baseline.build], ['Typecheck', report.baseline.typecheck], ['Lint', report.baseline.lint]].map(([label, value]) => <div className="check" key={label as string}><span>{label}</span><strong className={value as string}>{statusLabel(value as string)}</strong></div>)}</div><p className="helper" style={{ marginTop: 8 }}>Result: <strong>{report.baseline.result}</strong> · {report.baseline.filesChanged} files changed.</p></section> : null}<section className="approval"><h3>Approval gate · {status}</h3><p>Review the diff and verification checks before accepting this migration into your repository workflow.</p><div className="approval-actions"><button className="btn btn-primary" onClick={approve} disabled={approving || isDone} data-testid="button-approve-migration">{approving ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} {status === 'APPROVED' ? 'Approved' : 'Approve migration'}</button><button className="btn btn-danger" onClick={reject} disabled={rejecting || isDone} data-testid="button-reject-migration">{rejecting ? <Loader2 className="animate-spin" /> : <XCircle />} {status === 'REJECTED' ? 'Rejected' : 'Reject'}</button></div></section><ErrorRecoveryUX report={report} /></div></div>;
 }
 
 /* ── Report Page ────────────────────────────────────────────────────────────── */

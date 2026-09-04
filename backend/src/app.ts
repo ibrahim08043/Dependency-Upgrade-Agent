@@ -1,6 +1,8 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import path from "node:path";
+import { existsSync } from "node:fs";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
@@ -50,6 +52,21 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+// --- Production static file serving ---
+// In production, serve the frontend build from frontend/dist/public/.
+// In development, the Vite dev server handles the frontend via proxy.
+const isProduction = process.env.NODE_ENV === "production";
+const frontendDist = path.resolve(import.meta.dirname, "../../frontend/dist/public");
+if (isProduction && existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  // SPA fallback: any non-API GET that didn't match a static file returns index.html
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api")) return next();
+    res.sendFile(path.join(frontendDist, "index.html"));
+  });
+  logger.info({ path: frontendDist }, "Serving frontend static files");
+}
 
 // Express error handler: surface body-parser failures (e.g. oversized uploads)
 // as clean JSON instead of default HTML. Keeps the contract frontend-friendly.

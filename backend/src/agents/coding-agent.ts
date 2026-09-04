@@ -4,7 +4,7 @@ import { GrokApiError, GrokConfigError } from "../services/ai/types";
 import { isProviderQuotaExhausted } from "../services/ai/gemini";
 import { runCommand } from "../lib/run-command";
 import { addEvent, saveMigration, getMigration } from "../lib/migration-state";
-import type { MigrationRecord } from "../lib/migration-state";
+import type { MigrationEvent, MigrationRecord } from "../lib/migration-state";
 import { loadToolContext } from "./tools/context";
 import type { ToolContext } from "./tools/context";
 import { executeTool, getToolDefinitions } from "./tools";
@@ -44,7 +44,7 @@ export interface AgentRunHooks {
   /** Persist updated migration + agentState. Filled in by the loop. */
   persist?: (migration: MigrationRecord, state: AgentState) => Promise<void>;
   /** Emit a real event. Filled in by the loop. */
-  event?: (level: "info" | "success" | "warning" | "error", message: string) => Promise<void>;
+  event?: (level: "info" | "success" | "warning" | "error", message: string, extra?: Partial<MigrationEvent>) => Promise<void>;
 }
 
 const MAX_TOOL_ROUNDS = 15;
@@ -117,7 +117,7 @@ interface RunLoop {
   state: AgentState;
   planRef: { current: AgentPlan | null };
   persist: (state: AgentState) => Promise<void>;
-  event: (level: "info" | "success" | "warning" | "error", message: string) => Promise<void>;
+  event: (level: "info" | "success" | "warning" | "error", message: string, extra?: Partial<MigrationEvent>) => Promise<void>;
   migration: MigrationRecord;
 }
 
@@ -143,7 +143,13 @@ async function executeOneToolCall(
   };
   loop.state.currentAction = `running ${call.name}`;
   await loop.persist(loop.state);
-  await loop.event("info", `Running ${call.name}`).catch(() => undefined);
+  await loop.event("info", `Running ${call.name}`, {
+    stage: "migration",
+    eventType: "tool_call_start",
+    tool: call.name,
+    toolArgs: truncate(input, 300),
+    durationMs: 0,
+  } as Partial<MigrationEvent>).catch(() => undefined);
 
   const outcome = await executeTool(call.name, input, loop.toolCtx);
 
@@ -179,6 +185,20 @@ async function executeOneToolCall(
   if (!outcome.ok) record.errorType = outcome.errorType;
   loop.state.toolCalls.push(record);
   await loop.persist(loop.state);
+
+  // Emit a tool-completion event with structured details for the timeline.
+  await loop.event(
+    outcome.ok ? "info" : "warning",
+    `${call.name} ${outcome.ok ? "completed" : "failed"} (${record.durationMs}ms)`,
+    {
+      stage: "migration",
+      eventType: outcome.ok ? "tool_call_complete" : "tool_call_error",
+      tool: call.name,
+      toolResult: record.resultSummary.slice(0, 400),
+      durationMs: record.durationMs,
+      errorCategory: outcome.ok ? undefined : outcome.errorType,
+    } as Partial<MigrationEvent>,
+  ).catch(() => undefined);
 
   if (call.name === "create_migration_plan" && outcome.ok) {
     const { __plan: _drop, ...rest } = outcome.result as { __plan?: AgentPlan };
@@ -230,8 +250,8 @@ export async function runCodingAgent(
     };
   }
 
-  const event = async (level: "info" | "success" | "warning" | "error", message: string) => {
-    await addEvent({ id: randomUUID(), migrationId: ctx.migrationId, timestamp: new Date().toISOString(), level, message });
+  const event = async (level: "info" | "success" | "warning" | "error", message: string, extra?: Partial<MigrationEvent>) => {
+    await addEvent({ id: randomUUID(), migrationId: ctx.migrationId, timestamp: new Date().toISOString(), level, message, ...extra });
     opts.onEvent?.(level, message);
   };
   const persist = async (nextState: AgentState) => {

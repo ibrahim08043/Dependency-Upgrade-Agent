@@ -202,6 +202,7 @@ router.get("/migrations/:id/report", async (req, res) => {
     affectedApiFindings: migration.riskSummary?.affectedApis ?? [],
     verificationCommands: migration.verificationCommands ?? [],
     baseline: migration.baseline ?? null,
+    agentState: migration.agentState ?? null,
     aiStages: migration.aiStages ?? [],
     approvalStatus: migration.status === "approved" ? "APPROVED" : migration.status === "rejected" ? "REJECTED" : migration.status === "completed" ? "PENDING" : String(migration.status),
   });
