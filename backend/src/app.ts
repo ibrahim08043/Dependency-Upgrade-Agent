@@ -61,8 +61,8 @@ const frontendDist = path.resolve(import.meta.dirname, "../../frontend/dist/publ
 if (isProduction && existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
   // SPA fallback: any non-API GET that didn't match a static file returns index.html
-  app.get("*", (req, res, next) => {
-    if (req.path.startsWith("/api")) return next();
+  app.use((req, res, next) => {
+    if (req.method !== "GET" || req.path.startsWith("/api")) return next();
     res.sendFile(path.join(frontendDist, "index.html"));
   });
   logger.info({ path: frontendDist }, "Serving frontend static files");
