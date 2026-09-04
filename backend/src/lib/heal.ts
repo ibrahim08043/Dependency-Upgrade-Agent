@@ -10,7 +10,7 @@
 import type { GrokProvider } from "../services/ai/types";
 import { ResearchError } from "./research";
 
-export const MAX_HEAL_ATTEMPTS = 3;
+export const MAX_HEAL_ATTEMPTS = 2;
 
 export interface FailureDiagnosisInput {
   dependency: string;

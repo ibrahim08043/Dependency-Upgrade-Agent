@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ChatMessage, GrokProvider, ToolCallRequest } from "../services/ai/types";
 import { GrokApiError, GrokConfigError } from "../services/ai/types";
+import { isProviderQuotaExhausted } from "../services/ai/gemini";
 import { runCommand } from "../lib/run-command";
 import { addEvent, saveMigration, getMigration } from "../lib/migration-state";
 import type { MigrationRecord } from "../lib/migration-state";
@@ -46,11 +47,15 @@ export interface AgentRunHooks {
   event?: (level: "info" | "success" | "warning" | "error", message: string) => Promise<void>;
 }
 
-const MAX_TOOL_ROUNDS = 25;
+const MAX_TOOL_ROUNDS = 15;
 
 const SYSTEM_PROMPT_TEMPLATE = `You are the Dependency Upgrade Migration Agent. You are working inside an isolated
 copy of a JavaScript/TypeScript repository. Your job is to perform a real
 dependency major-version upgrade by making the smallest safe set of code changes.
+
+IMPORTANT: API calls are expensive. Be efficient — minimize the number of rounds.
+Each round you may call MULTIPLE tools in a single response. Prefer batching
+read_file, list_files, and search_code calls together rather than one per round.
 
 Repository context:
 - Dependency to upgrade: {{dependency}}
@@ -59,19 +64,15 @@ Repository context:
 - Package manager: {{packageManager}}
 {{researchContext}}
 
-Workflow:
-1. Use read_package_json to confirm the current dependency and scripts.
-2. Use list_files, read_file, and search_code to find affected usages of the dependency.
-3. Call create_migration_plan ONCE with a concise structured plan BEFORE editing files.
-   Keep summaries short; never output chain-of-thought.
-4. Inspect the exact files you plan to edit (read_file) before patching.
-5. Use apply_patch for minimal edits to EXISTING files; write_file to create NEW files.
-   Never rewrite whole files if a small patch will do.
-6. After making changes, call get_git_diff to review the real diff, and optionally run
-   run_command to sanity-check (e.g. "npx tsc --noEmit") if useful.
-7. When your changes are complete, respond with a short final JSON summary and NO tool calls.
-   The final message must be valid JSON:
+Workflow (efficient):
+1. In ONE round: call read_package_json AND list_files AND search_code to gather all info.
+2. In ONE round: call create_migration_plan AND read_file for the files you need to edit.
+3. In ONE round: apply all patches (apply_patch / write_file) and then get_git_diff.
+4. In ONE round (optional): run_command for sanity-check if needed.
+5. Then respond with a short final JSON summary and NO tool calls:
    {"summary":"...", "no_changes_required":false}
+
+Keep to 3-5 rounds maximum. Every unnecessary round wastes API quota.
 
 Rules:
 - Only use the provided tools. The backend validates every request.
@@ -287,7 +288,15 @@ export async function runCodingAgent(
         break;
       }
 
-      messageLog.push({ role: "assistant", content: completion.summary ?? "" });
+      // The assistant message must DECLARE its tool_calls so the follow-up `tool`
+      // result messages can be bound to them by the API (OpenAI-compatible spec,
+      // required by strict providers like Groq's Harmony templater).
+      const assistantToolCalls = completion.toolCalls.map((call) => ({
+        id: call.id,
+        type: "function" as const,
+        function: { name: call.name, arguments: call.arguments },
+      }));
+      messageLog.push({ role: "assistant", content: completion.summary ?? "", tool_calls: assistantToolCalls });
       for (const call of completion.toolCalls) {
         const done = await executeOneToolCall(call, loop);
         messageLog.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(done) });
@@ -345,9 +354,30 @@ export async function runCodingAgent(
       summary: finalSummary,
     };
   } catch (error) {
+    state.error = error instanceof Error ? error.message : String(error);
+
+    // If the provider's quota is exhausted, return partial results instead of
+    // crashing. The agent may have already applied some patches — the
+    // self-healing loop and verification can still run against the current
+    // file state.
+    if (isProviderQuotaExhausted(provider)) {
+      state.status = rounds > 1 ? "completed" : "failed";
+      state.currentAction = "quota_exhausted";
+      state.agentSummary = `Gemini quota exhausted after ${rounds} round(s). Partial changes may have been applied.`;
+      await persist(state);
+      await event("warning", `Gemini quota exhausted — returning partial results (${state.filesModified.length} files modified, ${state.patchesApplied} patches applied)`);
+      return {
+        status: state.filesModified.length > 0 ? "completed" : "no_changes",
+        agentState: state,
+        plan: planRef.current,
+        filesModified: state.filesModified,
+        patchesApplied: state.patchesApplied,
+        summary: state.agentSummary,
+      };
+    }
+
     state.status = "failed";
     state.currentAction = "failed";
-    state.error = error instanceof Error ? error.message : String(error);
     await persist(state);
     const label = error instanceof GrokConfigError || error instanceof GrokApiError ? "Grok" : "agent";
     await event("error", `${label} error: ${state.error}`);

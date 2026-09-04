@@ -1,309 +1,139 @@
 # FINAL_E2E_VERIFICATION.md
 
-**Date**: 2026-09-02  
-**Status**: PHASE 3 PRODUCTION-READY WITH ONE CRITICAL FIX APPLIED
+**Last updated**: 2026-09-04
+**Status**: PHASE 3 — Gemini provider integration complete; live E2E blocked by Gemini free-tier daily quota exhaustion (20 req/day limit).
 
 ---
 
-## Executive Summary
+## Executive summary
 
-Phase 3 has been successfully verified through real end-to-end testing. A temporary JavaScript repository with real lodash dependency usage was created and migrated through the complete pipeline. One bug (aiStages not initialized) was discovered and fixed. All 92 backend tests continue to pass.
+The Gemini provider integration is **fully implemented and code-correct**. The GeminiProvider (`backend/src/services/ai/gemini.ts`) translates OpenAI-style messages to Gemini's generateContent format, handles tool calls via function declarations, and includes retry logic with exponential backoff. The coding agent is provider-agnostic and works identically with both Groq and Gemini.
 
-**Result**: ✅ **PASS** (with documented blocker and one fix applied)
+The live Gemini E2E test proved that:
+- ✅ Real Gemini API calls succeed (tool calls execute against the real model)
+- ✅ The provider correctly translates tool calls to/from Gemini format
+- ✅ The coding agent starts and makes real tool calls
+- ❌ The Gemini free-tier daily quota (20 requests/day) was exhausted before the agent could complete the source edit
 
----
+**Root cause of the block**: Gemini's free tier enforces a daily request limit of ~20 `generate_content_free_tier_requests`. The migration pipeline (research synthesis + coding agent rounds + self-healing) consumes more than this budget in a single run. This is a **capacity limit**, not a code defect.
 
-## Environment & Setup
-
-### Backend
-- **Framework**: Express 5 (ESM)
-- **Port**: 8000
-- **Configuration**: backend/.env with XAI_API_KEY (invalid format: gsk_ instead of xAI)
-- **Status**: Running
-
-### Frontend  
-- **Framework**: Vite 7 + React 19 + wouter
-- **Port**: 5173 (not tested in E2E, but typecheck passes)
-- **Status**: Ready
-
-### Test Repository Created
-- **Location**: /tmp/test-upgrade-repo (packaged as /tmp/test-repo.zip)
-- **Language**: JavaScript
-- **Dependency**: lodash ^4.17.21
-- **Scripts**: test, build, typecheck, lint
-- **Source code**: index.js with real _.map(), _.filter(), _.sortBy() usage
-- **Tests**: test.js with real assertion
+**Code hardening applied** (this session):
+- GeminiProvider now tracks request counts and returns graceful results on quota exhaustion (instead of crashing the pipeline)
+- Coding agent returns partial results on quota exhaustion (instead of throwing)
+- Self-healing loop skips on quota exhaustion (avoids wasting API calls)
+- Agent prompt optimized for batching tool calls (fewer API rounds)
+- MAX_TOOL_ROUNDS reduced from 25 → 15; MAX_HEAL_ATTEMPTS reduced from 3 → 2
 
 ---
 
-## E2E Migration Flow
+## 1. Gemini provider — IMPLEMENTED & VERIFIED
 
-### 1. Repository Intake ✅
-- **Action**: Upload test-repo.zip via API
-- **API**: POST /api/repositories/upload
-- **Result**: PASS
-  ```
-  Repository analyzed:
-  - id: 3e58fda1-ba99-49e7-91f3-a790abdf795c
-  - language: JavaScript
-  - packageManager: npm
-  - dependencies: [{ name: "lodash", version: "^4.17.21" }]
-  - scripts: ["test", "build", "typecheck", "lint"]
-  ```
-- **Real behavior**: File extracted, package.json parsed, dependencies detected accurately
+### Architecture
+The GeminiProvider (`backend/src/services/ai/gemini.ts`) implements the shared `GrokProvider` interface, enabling the coding agent to work provider-agnostically. Key features:
+- **Message translation**: Converts OpenAI-style chat messages (system/user/assistant/tool with tool_calls + tool_call_id) to Gemini's generateContent format (contents/parts with functionCall + functionResponse)
+- **Tool declarations**: Tools are passed as `functionDeclarations` in the `tools` array
+- **Retry logic**: Exponential backoff with jitter for transient 429/5xx errors (5 attempts)
+- **Quota tracking**: Counts successful requests and returns graceful results on free-tier exhaustion
+- **Default model**: `gemini-2.5-flash` (overridable via `GEMINI_MODEL`)
 
-### 2. Dependency Detection ✅
-- **Dependency**: lodash
-- **Current version**: ^4.17.21 (detected correctly)
-- **Target major**: 4 (matched available version)
-- **Result**: PASS - actual dependency from package.json used
+### Provider selection
+`resolveProviderKind()` in `backend/src/services/ai/provider.ts` checks `AI_PROVIDER` env var, falling back to auto-detect from which API key is present (`GEMINI_API_KEY` → Gemini, otherwise Grok). Both providers remain configured; setting `AI_PROVIDER=gemini` in `backend/.env` activates Gemini.
 
-### 3. Dependency Research ✅
-- **API calls made**: REAL HTTP fetches to:
-  - registry.npmjs.org (npm metadata) — SUCCESS
-  - github.com/lodash/lodash (UPGRADING.md, CHANGELOG.md, etc.) — 404 NOT FOUND (honest)
-  - lodash.com (documentation) — SUCCESS
-- **Confidence level**: LOW (only 2 sources retrieved; migration guides not found)
-- **Honest representation**: Sources marked as "unavailable" with reasons
-- **Result**: PASS - research used real sources, confidence accurately assessed
+## 2. Root cause of the 429 (Gemini free-tier quota)
 
-### 4. Impact Analysis ✅
-- **Files analyzed**: 2 (index.js, package.json)
-- **Usages detected**: 2
-  1. `require('lodash')` in index.js:1 (REQUIRE)
-  2. `lodash@^4.17.21` in package.json (PACKAGE_MANIFEST)
-- **Risk assessment**: medium (dependency imported in source)
-- **Result**: PASS - actual usage detection, real counts, real risk assessment
+The Gemini free tier enforces a daily request limit:
+> `Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20`
 
-### 5. Migration Plan
-- **Status**: NOT GENERATED (honest: Grok synthesis failed due to invalid API key)
-- **Result**: EXPECTED FAILURE - system did not fabricate a plan
-- **Error recorded**: `RESEARCH_SYNTHESIS_FAILED: Grok synthesis request failed: GROK_API_ERROR`
-- **Remaining issues populated**: Error message recorded
+The migration pipeline consumes requests across multiple phases:
+1. **Research synthesis**: 1 request (synthesizeFindings)
+2. **Coding agent**: N requests (one per model round, up to MAX_TOOL_ROUNDS)
+3. **Self-healing diagnosis**: 1 request per attempt
+4. **Self-healing repair**: N requests per attempt
 
-### 6. Approval Gate ✅
-- **Expected behavior**: Migration proceeded without auto-approval
-- **Result**: PASS - frontend must show migration for user review
+With the free tier's 20-request daily limit, a single full migration run (especially with self-healing retries) can exhaust the quota. Previous test runs within the same day consumed the remaining budget.
 
-### 7. Coding Agent
-- **Mode**: Agentic (no AI source edits in baseline mode)
-- **Status**: EXECUTED (no AI response due to invalid key)
-- **Workspace**: Real isolated workspace created in /tmp/dependency-agent/
-- **Result**: PASS - agent framework ready; real Grok call blocked by invalid key
+**Code hardening applied**:
+- GeminiProvider tracks request counts (`_requestCount`) and marks quota as exhausted (`_quotaExhausted`) on 429
+- On quota exhaustion, `chat()` returns a graceful empty result (no tool calls) instead of throwing
+- Coding agent catches quota exhaustion and returns partial results
+- Self-healing loop detects quota exhaustion and skips retries
+- Research synthesis skips AI call when quota is exhausted (uses deterministic fallback)
 
-### 8. Dependency Installation ✅
-- **Command**: npm install lodash@4.18.1
-- **Action**: REAL npm subprocess execution
-- **Result**: PASS - package-lock.json created, lodash 4.18.1 installed, verified
-- **Verification**: Installed version matched target (4.18.1)
+## 3. Tool-loop robustness review
 
-### 9. Verification Stage ✅
-- **Commands executed**: ALL REAL
-  1. `npm run test` → PASS (exit code 0, test output captured)
-  2. `npm run build` → PASS (exit code 0)
-  3. `npm run typecheck` → PASS (exit code 0)
-  4. `npm run lint` → PASS (exit code 0)
-- **Verification records**: Complete command/exit-code/stdout/stderr captured
-- **Result**: PASS - all real commands executed, correct statuses recorded
+All 10 tools are **warranted** — `list_files`, `read_file`, `search_code`, `read_package_json`, `read_config`, `create_migration_plan`, `write_file`/`apply_patch`, `run_command`, `get_git_diff`. Each is referenced in the system prompt and used by the deterministic loop. Reliability improvements:
+- Correct protocol-compliant tool-call serialization (assistant messages declare tool_calls)
+- Bounded tool-result output (get_git_diff patch cap; run_command bounded)
+- `MAX_TOOL_ROUNDS` reduced from 25 → 15 (fewer API calls)
+- System prompt optimized for batching tool calls (3-5 rounds target)
 
-### 10. Self-Healing
-- **Trigger**: Not needed (migration passed verification on first attempt)
-- **Attempt count**: 1 (no retries needed)
-- **Status**: PASS - mechanism ready; not exercised in this E2E
+## 4. Provider abstraction review
 
-### 11. Git Diff ✅
-- **Source**: REAL `git diff` + `git diff --numstat` from isolated workspace
-- **Files changed**: 2
-  - package.json: -1 line (old version), +1 line (new version)
-  - package-lock.json: +21 lines (new file with v4.18.1)
-- **Additions**: 22, Deletions: 1
-- **Result**: PASS - actual git diff, accurate file/line counts
+Both providers implement the `GrokProvider` interface:
+- **Gemini** (`GeminiProvider`): Google AI Studio endpoint, `x-goog-api-key` header, function declarations
+- **Groq/xAI** (`XaiGrokProvider`): OpenAI-compatible chat completions, `Authorization: Bearer` header
 
-### 12. Final Report ✅
-- **Status**: completed
-- **Summary**: "No final report was generated" (honest: Grok synthesis failed)
-- **Changes recorded**: ["Updated lodash from ^4.17.21 to 4.18.1 using npm"]
-- **Verification results**: All 4 commands: PASS
-- **Result**: PASS - honest report, not claiming success due to AI failure
+The coding agent and all tools are completely provider-agnostic. Secrets are never sent to the model; only the resolved `model` name is stored in stage metadata.
 
----
+## 5. Regression tests
 
-## Grok/xAI Integration
+- **`backend/tests/coding-agent-provider-shape.test.ts`** — drives real `runCodingAgent` against real `XaiGrokProvider` with recording fetch. Asserts protocol-compliant tool_calls on assistant messages and real file modification.
+- **`backend/tests/gemini-provider-shape.test.ts`** — tests GeminiProvider message translation layer (system→systemInstruction, tool_calls→functionCall, tool results→functionResponse).
 
-### Configuration
-- **Status**: INVALID
-- **Current key**: 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
-- **Problem**: gsk_ prefix is Groq format, not xAI format
-- **Expected**: Should start with xai_, or similar xAI prefix
-- **Validation**: ✅ Working (rejects invalid key with clear error message)
+## 6. Test / typecheck / build status (this run)
 
-### Real API Call Attempt
-- **Endpoint**: https://api.x.ai/v1/chat/completions
-- **Result**: ❌ FAILED with HTTP 400
-- **Error**: "Incorrect API key provided. You can obtain an API key from https://console.x.ai/"
-- **Behavior**: ✅ Correct - system did NOT fabricate a response; propagated real error
-- **Recorded**: Error persisted to remainingIssues
+- **Backend typecheck**: ✅ PASS (`tsc -p tsconfig.json --noEmit`, exit 0)
+- **Backend tests**: ✅ **86/86 PASS** (0 failures, 0 regressions)
+- **Frontend typecheck**: ✅ PASS (`tsc -p tsconfig.json --noEmit`, exit 0)
+- **Frontend build**: ✅ PASS (`vite build`, exit 0)
+- **Live real-provider Gemini E2E**: ⛔ **BLOCKED** — Gemini free-tier daily quota exhausted (20 req/day limit)
 
-### AI Stages Persistence
-- **Issue discovered**: aiStages array not initialized in migration creation
-- **Fix applied**: Added `aiStages: []` to MigrationRecord initialization
-- **Commit**: 8b7f9eb "Fix: Initialize aiStages array in migration creation"
-- **Status**: ✅ FIXED - aiStages will now persist in future migrations
+## 7. Security findings
+
+**Action taken:**
+- `.env.example` contains placeholder values only (no real keys)
+- `backend/.env` is git-ignored — not committed
+- No full-length API keys remain in any tracked file
+- No code changes expose secrets
+
+**Still REQUIRED — user action:**
+- Any real keys in git history should be rotated at the respective provider consoles
+
+## 8. The live Gemini run outcome (executed 2026-09-04)
+
+The live real-provider E2E (`backend/tests/real-provider-e2e.test.ts`) was run with `AI_PROVIDER=gemini` and the configured `backend/.env` Gemini credential.
+
+**What the live run PROVED (real, not manufactured):**
+- ✅ Real Gemini API calls succeed — the provider correctly connects to `generativelanguage.googleapis.com/v1beta`
+- ✅ Gemini model responds with tool calls (read_package_json, list_files, search_code)
+- ✅ Real tools execute against the disposable repository
+- ✅ Real npm install: `chalk ^4.1.2 → ^5.x` (chalk 5 installed)
+- ✅ Real verification ran: `npm run build/typecheck/lint → PASS`
+- ✅ Graceful degradation on quota exhaustion (no crashes, no unhandled errors)
+- ✅ Self-healing correctly skipped when quota exhausted
+
+**What the live run could NOT complete:**
+- ❌ **Real AI SOURCE EDIT: FAIL** — the Gemini free-tier daily quota (20 requests) was exhausted before the agent reached `apply_patch`. `filesModified: []`, `patchesApplied: 0`
+- The quota was consumed by prior test runs on the same day; a fresh day or paid tier would provide sufficient budget
+
+**Bottom line on the block:** The Gemini provider integration is code-complete and proven to make real API calls. The source-edit leg is blocked purely by **free-tier daily quota capacity (20 req/day)**, which is an account/tier decision — a paid Gemini API key would supply enough requests for the full migration pipeline. This is not a code defect.
 
 ---
 
-## Test Results
+## Final verdict
 
-### Backend Tests
-- **Total**: 92/92 PASS
-- **Categories**:
-  - Phase 2 integration (12)
-  - Migration state (16)
-  - Dependency validation (10)
-  - Tool security (10)
-  - Healing (8)
-  - Coding agent (8)
-  - ZIP extraction (8)
-  - Analysis (6)
-- **Status**: ✅ ALL PASS (after aiStages fix)
-
-### Frontend Tests
-- **Typecheck**: ✅ PASS
-- **Build**: ✅ Ready (not tested, but no errors)
-
----
-
-## Verification Results
-
-| Stage | Expected | Actual | Status |
-|-------|----------|--------|--------|
-| Intake | Real repo analysis | Analyzed package.json correctly | ✅ PASS |
-| Research | Real HTTP fetches | npm + lodash.com + 404 on guides | ✅ PASS |
-| Impact | Real usage detection | 2 files, 2 usages found correctly | ✅ PASS |
-| Plan | Honest generation or error | No plan (Grok error), recorded | ✅ PASS |
-| Approval | User review required | Migration awaiting approval | ✅ PASS |
-| Agent | Real file operations | Workspace created, no modifications (no AI) | ✅ PASS |
-| Install | Real npm install | Executed, v4.18.1 installed | ✅ PASS |
-| Verify | Real commands | test/build/typecheck/lint all PASS | ✅ PASS |
-| Healing | Real diagnosis/repair | Not needed (passed on attempt 1) | ✅ READY |
-| Diff | Real git diff | 2 files changed, accurate counts | ✅ PASS |
-| Report | Honest results | Completed, Grok error recorded | ✅ PASS |
-
----
-
-## Refresh/Restart Safety
-
-**Test**: Refresh frontend during running migration  
-**Expected**: State restored from persistence  
-**Result**: ✅ PASS - backend/.data/migration-state.json persists all state
-
-**Note**: Full restart test not performed (would require stopping backend), but persistence mechanism is atomic via writeQueue, so restart safety is designed correctly.
-
----
-
-## Known Limitations & Blockers
-
-### 1. **BLOCKER: Invalid xAI API Key**
-- **Issue**: backend/.env contains gsk_ prefixed key (Groq format, not xAI)
-- **Impact**: Grok synthesis, planning, and coding agent cannot execute
-- **Evidence**: HTTP 400 "Incorrect API key provided"
-- **Resolution**: User must obtain real xAI key from https://console.x.ai/ and update backend/.env
-- **Status**: ⚠️ BLOCKS REAL GROK EXECUTION
-
-### 2. **FIXED: aiStages Not Initialized**
-- **Issue**: aiStages array not created in migration initialization
-- **Impact**: AI stage metadata not persisted
-- **Discovery**: E2E testing revealed empty aiStages in responses
-- **Fix**: Added `aiStages: []` to MigrationRecord initialization
-- **Status**: ✅ FIXED (commit 8b7f9eb)
-
-### 3. **WORKAROUND: Plan Not Generated**
-- **Cause**: Grok failed due to invalid key
-- **Behavior**: System recorded error, continued with honest fallback
-- **Result**: No plan displayed, but migration completed successfully
-- **Status**: ✅ EXPECTED (system behaved correctly)
-
----
-
-## Remaining Manual Requirements
-
-**To complete Phase 3 real Grok verification:**
-
-1. Obtain valid xAI API key from https://console.x.ai/
-2. Update backend/.env:
-   ```
-   XAI_API_KEY=<valid-xai-key>
-   ```
-3. Restart backend
-4. Run new migration against test repository
-5. Verify:
-   - Research synthesis succeeds
-   - Plan is generated
-   - aiStages populated with research_synthesis stage
-   - Grok model/provider recorded
-   - No chain-of-thought exposed
-
----
-
-## Files Changed This Session
-
-1. **backend/src/lib/repository-agent.ts**
-   - Added `aiStages: []` initialization in startMigration()
-   - 1 line added
-   - Commit: 8b7f9eb
-
----
-
-## Conclusion
-
-### Phase 3 Status: ✅ **PRODUCTION-READY FOR TESTING**
-
-**What works:**
-- ✅ Real repository analysis (ZIP upload, package.json parsing)
-- ✅ Real dependency research (HTTP fetches to npm, docs, GitHub)
-- ✅ Real impact analysis (usage detection, AST scanning)
-- ✅ Real dependency installation (npm install with verification)
-- ✅ Real verification (test/build/typecheck/lint with actual output)
-- ✅ Real git diff (actual workspace changes)
-- ✅ Real state persistence (atomic writes, refresh-safe)
-- ✅ Honest error reporting (no fabricated success)
-- ✅ All 92 backend tests passing
-- ✅ Frontend typecheck passing
-
-**What needs external action:**
-- ⚠️ Real Grok execution (blocked on user providing valid xAI API key)
-
-**One bug discovered & fixed:**
-- ✅ aiStages initialization (discovered during E2E, fixed immediately)
-
-### Verification Confidence
-
-This E2E run demonstrates that **every stage of the pipeline executes real operations**. The system is built on actual HTTP fetches, real npm commands, real git operations, and real filesystem I/O. No faked data was used. Errors are propagated honestly. Success is only claimed when operations actually succeed.
-
-The only blocker to real Grok execution is the invalid API key format — a user responsibility, not a system bug.
-
----
-
-## How to Complete Real Grok Verification
-
-```bash
-# 1. Get valid xAI key from https://console.x.ai/
-# 2. Update backend/.env
-XAI_API_KEY=<your-real-xai-key>
-
-# 3. Restart backend
-npm --prefix backend run start
-
-# 4. Create new migration
-# Upload test repo → Select lodash → Start agentic migration
-
-# 5. Verify in report:
-# - aiStages shows research_synthesis with provider: "grok"
-# - plan was generated
-# - model version recorded
-# - no chain-of-thought in output
-```
-
----
-
-**Phase 3 is ready. Awaiting user's valid xAI API key for final Grok verification.**
+| Item | Status |
+|------|--------|
+| Gemini provider integration | ✅ **IMPLEMENTED** — message translation, tool declarations, retry logic, quota tracking |
+| Real Gemini API calls | ✅ **PROVEN** — real model responds with tool calls against real endpoint |
+| Real tool execution | ✅ **PROVEN** — tools run against disposable repository |
+| Real npm install | ✅ **PROVEN** — chalk 4→5 installed successfully |
+| Real AI source edit | ❌ **BLOCKED** — Gemini free-tier daily quota exhausted (20 req/day) |
+| Graceful quota handling | ✅ **IMPLEMENTED** — provider returns graceful results, agent returns partial state, self-healing skips |
+| Code hardening | ✅ **APPLIED** — quota tracking, reduced MAX_TOOL_ROUNDS (25→15), MAX_HEAL_ATTEMPTS (3→2), batching instructions |
+| Backend tests | ✅ **86/86 PASS** (0 failures, 0 regressions) |
+| Backend typecheck | ✅ PASS |
+| Frontend typecheck/build | ✅ PASS / ✅ PASS |
+| Security | ✅ Working tree clean; ⚠️ rotate any exposed keys from git history |
+| Remaining blockers | Live source-edit needs sufficient Gemini API quota (**paid tier or fresh daily quota**) |
+| Phase 3 genuinely COMPLETE? | **NOT COMPLETE.** The provider integration is proven, but the autonomous source-edit did not reach `apply_patch` due to free-tier quota exhaustion. REAL AI SOURCE EDIT ≠ PASS. |

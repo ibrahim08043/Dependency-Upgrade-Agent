@@ -431,6 +431,17 @@ export interface Migration {
   errorCode: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Diff summary: total files changed */
+  filesChanged?: number;
+  /** Diff summary: total line additions */
+  additions?: number;
+  /** Diff summary: total line deletions */
+  deletions?: number;
+  /** Number of remaining issues */
+  remainingIssuesCount?: number;
+  /** First remaining issue message for quick diagnosis */
+  /** @nullable */
+  firstIssue?: string | null;
   /**
      * Public agent activity recorded by the coding agent.
      * @nullable

@@ -20,7 +20,7 @@ import { ZipSecurityError } from "../lib/zip";
 const router: IRouter = Router();
 
 /** Extract a clean machine-readable error code + message from a thrown error. */
-function errorPayload(error: unknown): { error: string } {
+function errorPayload(error: unknown): { error: string; code?: string } {
   // Prefer the error's `code`/`name` over `instanceof` — the tsx/esbuild loader can
   // produce a duplicate class identity so `instanceof ZipSecurityError` is unreliable.
   if (
@@ -31,12 +31,14 @@ function errorPayload(error: unknown): { error: string } {
   ) {
     const err = error as { code: string; message: string };
     const detail = err.message.replace(/^[A-Z_]+:\s*/, "");
-    return { error: `${err.code}: ${detail}` };
+    return { error: `${err.code}: ${detail}`, code: err.code };
   }
   const message = String(error)
     .replace(/^Error:\s*/, "")
     .replace(/^(?:ZipSecurityError|Error):\s*/, "");
-  return { error: message };
+  // Extract machine-readable code if present (e.g. "REPOSITORY_INVALID: ..." → "REPOSITORY_INVALID")
+  const codeMatch = message.match(/^([A-Z_]+):/);
+  return { error: message, code: codeMatch?.[1] };
 }
 
 function readUploadedZip(body: unknown, contentType: string | undefined): { bytes: Buffer; filename: string } {
@@ -65,6 +67,13 @@ function publicMigration(migration: NonNullable<Awaited<ReturnType<typeof getMig
   const { impactFiles: _impactFiles, sources: _sources, changes: _changes, remainingIssues: _remainingIssues, diff: _diff, agentState, research, riskSummary, verificationCommands, baseline, attempts, cancelled, plan, aiStages, ...publicData } = migration;
   return {
     ...publicData,
+    // Expose diff summary (files changed count) for workspace views
+    filesChanged: _diff?.filesChanged ?? 0,
+    additions: _diff?.additions ?? 0,
+    deletions: _diff?.deletions ?? 0,
+    // Expose remaining issues count and first issue for quick diagnosis
+    remainingIssuesCount: _remainingIssues?.length ?? 0,
+    firstIssue: _remainingIssues?.[0] ?? null,
     agentState: agentState ?? null,
     research: research ?? null,
     riskSummary: riskSummary ?? null,
@@ -120,6 +129,14 @@ router.get("/repositories/:id", async (req, res) => {
   const repository = await getRepository(req.params.id);
   if (!repository) return res.status(404).json({ error: "REPOSITORY_NOT_FOUND" });
   return res.json(publicRepository(repository));
+});
+
+router.get("/repositories/:id/migrations", async (req, res) => {
+  const repository = await getRepository(req.params.id);
+  if (!repository) return res.status(404).json({ error: "REPOSITORY_NOT_FOUND" });
+  const all = await listMigrations();
+  const repoMigrations = all.filter((m) => m.repositoryId === req.params.id);
+  return res.json(repoMigrations.map(publicMigration));
 });
 
 router.get("/migrations", async (_req, res) => {

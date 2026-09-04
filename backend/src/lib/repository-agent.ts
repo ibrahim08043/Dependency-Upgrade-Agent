@@ -4,7 +4,8 @@ import path from "node:path";
 import { logger } from "./logger";
 import { runCommand } from "./run-command";
 import { captureDiff } from "./git";
-import { getGrokProvider } from "../services/ai/provider";
+import { getGrokProvider, isProviderConfigured } from "../services/ai/provider";
+import { isProviderQuotaExhausted } from "../services/ai/gemini";
 import { runCodingAgent } from "../agents/coding-agent";
 import { extractZipToWorkspace } from "./zip";
 import {
@@ -23,7 +24,7 @@ import { researchDependency as fetchResearch, ResearchError } from "./research";
 import { scanRepositoryUsage } from "./impact";
 import { applyRiskToFindings } from "./risk";
 import { synthesizeFindings, fallbackFindingsFromSources } from "./synthesis";
-import { diagnoseFailure, HealError } from "./heal";
+import { diagnoseFailure, HealError, MAX_HEAL_ATTEMPTS } from "./heal";
 import { buildFallbackPlan } from "./plan";
 import {
   validateDependency,
@@ -43,29 +44,31 @@ export function setMigrationAgentProviderOverride(provider: GrokProvider | null)
   __migAgentProvider = provider;
 }
 
-/** Distinguish the injected test seam from the real xAI provider for metadata. */
+/** Distinguish the injected test seam from the real providers for metadata. */
 function providerKind(provider: GrokProvider | null): string {
   if (!provider) return "none";
-  return provider === __migAgentProvider ? "scripted" : "grok";
+  if (provider === __migAgentProvider) return "scripted";
+  // Live providers are identified by their concrete type (non-secret metadata).
+  return provider.constructor.name === "GeminiProvider" ? "gemini" : "grok";
 }
 
 /**
- * Resolve the Grok provider for the coding/repair agent WITHOUT throwing when
- * unconfigured. Returns the injected scripted provider (tests), the live provider
- * when XAI_API_KEY is set, else null.
+ * Resolve the provider for the coding/repair agent WITHOUT throwing when
+ * unconfigured. Returns the injected scripted provider (tests), the live
+ * provider when any real API key is set, else null.
  */
 function getGrokProviderOrNull(): GrokProvider | null {
   if (__migAgentProvider) return __migAgentProvider;
-  if (process.env.XAI_API_KEY) return getGrokProvider();
+  if (isProviderConfigured()) return getGrokProvider();
   return null;
 }
 
 /**
- * Resolve ONLY the live Grok provider (ignoring the test seam). Used for research
+ * Resolve ONLY the live provider (ignoring the test seam). Used for research
  * synthesis so a scripted test provider drives only the coding agent deterministically.
  */
 function getLiveGrokProviderOrNull(): GrokProvider | null {
-  if (process.env.XAI_API_KEY) return getGrokProvider();
+  if (isProviderConfigured()) return getGrokProvider();
   return null;
 }
 
@@ -448,7 +451,10 @@ export async function runMigration(migrationId: string): Promise<void> {
     try {
       const provider = getLiveGrokProviderOrNull();
       const synthesisStart = Date.now();
-      synthesized = provider
+      // Skip AI synthesis if the provider's quota is already exhausted —
+      // use the deterministic fallback to save API calls for the coding agent.
+      const quotaAvailable = !provider || !isProviderQuotaExhausted(provider);
+      synthesized = provider && quotaAvailable
         ? await synthesizeFindings(provider, {
             dependency: migration.dependency,
             currentVersion: migration.oldVersion,
@@ -659,85 +665,94 @@ export async function runMigration(migrationId: string): Promise<void> {
         const provider = __migAgentProvider ?? getGrokProvider();
         agentProviderUsed = provider;
         logger.info({ migrationId, providerConfigured: provider.isConfigured(), model: provider.constructor.name }, "[MIGRATION] Agent provider resolved");
-        logger.info(
-          { migrationId, XAI_API_KEY_present: Boolean(process.env.XAI_API_KEY), XAI_API_KEY_length: process.env.XAI_API_KEY?.length ?? 0 },
-          "[MIGRATION] Environment check before Grok call",
-        );
-        const agentStart = Date.now();
-        const research = migration.research;
-        const riskS = migration.riskSummary;
-        const researchSummary = research
-          ? [
-              `- Confidence: ${research.confidence}`,
-              research.breakingChanges.length ? `- Breaking changes: ${research.breakingChanges.join("; ")}` : null,
-              research.removedApis.length ? `- Removed APIs: ${research.removedApis.join("; ")}` : null,
-              research.renamedApis.length ? `- Renamed APIs: ${research.renamedApis.join("; ")}` : null,
-              research.changedApis.length ? `- Changed APIs: ${research.changedApis.join("; ")}` : null,
-              research.configurationChanges.length ? `- Config changes: ${research.configurationChanges.join("; ")}` : null,
-              research.importChanges.length ? `- Import changes: ${research.importChanges.join("; ")}` : null,
-            ]
-              .filter(Boolean)
-              .join("\n")
-          : "";
-        const impactSummary = scan.codeFindings.length
-          ? scan.codeFindings
-              .slice(0, 80)
-              .map((f) => `${f.filePath}:${f.line} [${f.usageType}] ${f.symbol} — ${f.matchedCode}`)
-              .join("\n")
-          : "";
-        const riskSummary = riskS
-          ? `High=${riskS.high}, Medium=${riskS.medium}, Low=${riskS.low}. Affected APIs: ${riskS.affectedApis.join(", ") || "none"}.`
-          : "";
-        const result = await runCodingAgent(provider, {
-          migrationId,
-          workspaceRoot: repository.rootPath,
-          originalRoot: path.join(path.dirname(repository.rootPath), "original"),
-          dependency: migration.dependency,
-          currentVersion: migration.oldVersion,
-          targetMajor: migration.targetVersion.split(".")[0],
-          mode: migration.mode,
-          researchSummary,
-          impactSummary,
-          riskSummary,
-        }, {
-          onEvent: (level, message) => void emitAgentEvent(level as "info" | "success" | "warning" | "error", message),
-        });
-        await recordAiStage("coding_agent", provider, "success", { durationMs: Date.now() - agentStart });
-        logger.info(
-          {
+
+        // Pre-flight quota check: skip the coding agent if the provider's
+        // free-tier quota is already exhausted (from synthesis or prior runs).
+        if (isProviderQuotaExhausted(provider)) {
+          await addEvent({
+            id: randomUUID(), migrationId, timestamp: new Date().toISOString(),
+            level: "warning",
+            message: "Gemini quota exhausted before coding agent start — skipping AI source edits",
+          });
+          migration.remainingIssues.push("Gemini free-tier quota exhausted — coding agent skipped");
+          agentFinished = true;
+        } else {
+          const agentStart = Date.now();
+          const research = migration.research;
+          const riskS = migration.riskSummary;
+          const researchSummary = research
+            ? [
+                `- Confidence: ${research.confidence}`,
+                research.breakingChanges.length ? `- Breaking changes: ${research.breakingChanges.join("; ")}` : null,
+                research.removedApis.length ? `- Removed APIs: ${research.removedApis.join("; ")}` : null,
+                research.renamedApis.length ? `- Renamed APIs: ${research.renamedApis.join("; ")}` : null,
+                research.changedApis.length ? `- Changed APIs: ${research.changedApis.join("; ")}` : null,
+                research.configurationChanges.length ? `- Config changes: ${research.configurationChanges.join("; ")}` : null,
+                research.importChanges.length ? `- Import changes: ${research.importChanges.join("; ")}` : null,
+              ]
+                .filter(Boolean)
+                .join("\n")
+            : "";
+          const impactSummary = scan.codeFindings.length
+            ? scan.codeFindings
+                .slice(0, 80)
+                .map((f) => `${f.filePath}:${f.line} [${f.usageType}] ${f.symbol} — ${f.matchedCode}`)
+                .join("\n")
+            : "";
+          const riskSummary = riskS
+            ? `High=${riskS.high}, Medium=${riskS.medium}, Low=${riskS.low}. Affected APIs: ${riskS.affectedApis.join(", ") || "none"}.`
+            : "";
+          const result = await runCodingAgent(provider, {
             migrationId,
-            resultStatus: result.status,
-            patchesApplied: result.patchesApplied,
-            toolCalls: result.agentState?.toolCalls?.length ?? 0,
-            filesModified: result.agentState?.filesModified?.length ?? 0,
-            filesInspected: result.agentState?.filesInspected?.length ?? 0,
-            durationMs: Date.now() - agentStart,
-          },
-          "[MIGRATION] Coding agent completed",
-        );
-        agentState = result.agentState;
-        migration.plan = result.plan
-          ? {
-              summary: result.plan.plannedChanges.join("; ") || `Upgrade ${migration.dependency}.`,
-              breakingChanges: result.plan.breakingChanges,
-              plannedChanges: result.plan.plannedChanges,
-              validationCommands: result.plan.verificationCommands,
-              migrationFindings: result.plan.migrationFindings ?? [],
-              affectedApis: result.plan.affectedApis ?? [],
-              riskAssessment: result.plan.riskAssessment ?? [],
-              plannedPackageChanges: result.plan.plannedPackageChanges ?? [],
-              plannedSourceChanges: result.plan.plannedSourceChanges ?? [],
-              plannedConfigChanges: result.plan.plannedConfigChanges ?? [],
-              potentialFailurePoints: result.plan.potentialFailurePoints ?? [],
-              researchConfidence: result.plan.researchConfidence,
-            }
-          : migration.plan;
-        migration.agentState = result.agentState;
-        if (result.patchesApplied > 0) {
-          migration.changes.push(`Applied ${result.patchesApplied} targeted migration patch(es)`);
-        }
-        if (result.status === "no_changes") {
-          migration.changes.push("Migration agent determined no code changes were required");
+            workspaceRoot: repository.rootPath,
+            originalRoot: path.join(path.dirname(repository.rootPath), "original"),
+            dependency: migration.dependency,
+            currentVersion: migration.oldVersion,
+            targetMajor: migration.targetVersion.split(".")[0],
+            mode: migration.mode,
+            researchSummary,
+            impactSummary,
+            riskSummary,
+          }, {
+            onEvent: (level, message) => void emitAgentEvent(level as "info" | "success" | "warning" | "error", message),
+          });
+          await recordAiStage("coding_agent", provider, "success", { durationMs: Date.now() - agentStart });
+          logger.info(
+            {
+              migrationId,
+              resultStatus: result.status,
+              patchesApplied: result.patchesApplied,
+              toolCalls: result.agentState?.toolCalls?.length ?? 0,
+              filesModified: result.agentState?.filesModified?.length ?? 0,
+              filesInspected: result.agentState?.filesInspected?.length ?? 0,
+              durationMs: Date.now() - agentStart,
+            },
+            "[MIGRATION] Coding agent completed",
+          );
+          agentState = result.agentState;
+          migration.plan = result.plan
+            ? {
+                summary: result.plan.plannedChanges.join("; ") || `Upgrade ${migration.dependency}.`,
+                breakingChanges: result.plan.breakingChanges,
+                plannedChanges: result.plan.plannedChanges,
+                validationCommands: result.plan.verificationCommands,
+                migrationFindings: result.plan.migrationFindings ?? [],
+                affectedApis: result.plan.affectedApis ?? [],
+                riskAssessment: result.plan.riskAssessment ?? [],
+                plannedPackageChanges: result.plan.plannedPackageChanges ?? [],
+                plannedSourceChanges: result.plan.plannedSourceChanges ?? [],
+                plannedConfigChanges: result.plan.plannedConfigChanges ?? [],
+                potentialFailurePoints: result.plan.potentialFailurePoints ?? [],
+                researchConfidence: result.plan.researchConfidence,
+              }
+            : migration.plan;
+          migration.agentState = result.agentState;
+          if (result.patchesApplied > 0) {
+            migration.changes.push(`Applied ${result.patchesApplied} targeted migration patch(es)`);
+          }
+          if (result.status === "no_changes") {
+            migration.changes.push("Migration agent determined no code changes were required");
+          }
         }
       } catch (agentError) {
         await recordAiStage("coding_agent", agentProviderUsed, "error", { error: String(agentError) });
@@ -866,7 +881,17 @@ export async function runMigration(migrationId: string): Promise<void> {
 
     // Self-healing (agentic only): diagnose + corrective repair, bounded to a max
     // of 3 total verification attempts (MAX_HEAL_ATTEMPTS). Never infinite.
-    while (migration.mode !== "baseline" && !passed && migration.attemptNumber < 3 && !isCancelled()) {
+    // Skip self-healing entirely if the provider's quota is exhausted — retrying
+    // would just waste more API calls and fail with the same 429 error.
+    while (migration.mode !== "baseline" && !passed && migration.attemptNumber < MAX_HEAL_ATTEMPTS && !isCancelled()) {
+      const currentProvider = healProvider();
+      if (currentProvider && isProviderQuotaExhausted(currentProvider)) {
+        await emitAgentEvent("warning", "Skipping self-healing — Gemini quota exhausted");
+        if (!migration.remainingIssues.includes("Gemini quota exhausted — self-healing skipped")) {
+          migration.remainingIssues.push("Gemini quota exhausted — self-healing skipped");
+        }
+        break;
+      }
       healRounds += 1;
       await update("heal", `Verification failed — diagnosing (attempt ${migration.attemptNumber + 1})`);
       await emitAgentEvent("info", "Sending failure to Grok for diagnosis");
@@ -875,6 +900,10 @@ export async function runMigration(migrationId: string): Promise<void> {
       let diagnosisOk = false;
       try {
         const provider = healProvider();
+        // Skip diagnosis if quota is already exhausted — don't waste an API call.
+        if (provider && isProviderQuotaExhausted(provider)) {
+          throw new HealError("HEAL_QUOTA_EXHAUSTED: Gemini quota exhausted — skipping diagnosis");
+        }
         if (!provider) throw new HealError("HEAL_UNAVAILABLE: no Grok provider");
         const diagStart = Date.now();
         const d = await diagnoseFailure(provider, {

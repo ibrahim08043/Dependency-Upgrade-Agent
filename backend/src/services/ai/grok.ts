@@ -26,6 +26,7 @@ interface XaiChoice {
 
 /** Default model resolved from env, overridable with XAI_MODEL. */
 const DEFAULT_MODEL = "grok-4-latest";
+const GROQ_DEFAULT_MODEL = "openai/gpt-oss-120b";
 
 function formatContent(value: unknown): string {
   if (typeof value === "string") return value;
@@ -43,24 +44,30 @@ function formatContent(value: unknown): string {
 export class XaiGrokProvider implements GrokProvider {
   private readonly apiKey: string;
   private readonly _model: string;
-  private readonly baseUrl = "https://api.x.ai/v1";
+  private readonly _baseUrl: string;
   private readonly fetchImpl: typeof fetch;
 
   constructor(env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch) {
-    const key = env.XAI_API_KEY;
+    // Single secret slot: XAI_API_KEY (backward compatible) or GROQ_API_KEY.
+    // Both address the OpenAI-compatible chat-completions API; the key prefix
+    // decides which provider's endpoint to call.
+    const key = env.XAI_API_KEY || env.GROQ_API_KEY;
     if (!key) {
       throw new GrokConfigError(
-        "GROK_NOT_CONFIGURED: XAI_API_KEY is not set on the backend. Add it to the backend environment to enable the agent.",
+        "GROK_NOT_CONFIGURED: XAI_API_KEY (or GROQ_API_KEY) is not set on the backend. Add it to the backend environment to enable the agent.",
       );
     }
     const problem = invalidXaiKeyReason(key);
     if (problem) {
       throw new GrokConfigError(
-        `GROK_NOT_CONFIGURED: ${problem} Fix XAI_API_KEY in the backend environment (backend/.env).`,
+        `GROK_NOT_CONFIGURED: ${problem} Fix XAI_API_KEY/GROQ_API_KEY in the backend environment (backend/.env).`,
       );
     }
     this.apiKey = key;
-    this._model = env.XAI_MODEL || DEFAULT_MODEL;
+    // Auto-detect provider from key prefix: gsk_ = Groq, otherwise xAI.
+    const isGroq = /^gsk_/.test(key);
+    this._baseUrl = isGroq ? "https://api.groq.com/openai/v1" : "https://api.x.ai/v1";
+    this._model = env.XAI_MODEL || (isGroq ? GROQ_DEFAULT_MODEL : DEFAULT_MODEL);
     this.fetchImpl = fetchImpl;
   }
 
@@ -81,6 +88,11 @@ export class XaiGrokProvider implements GrokProvider {
         role: m.role,
         content: m.content,
         ...(m.role === "tool" ? { tool_call_id: m.tool_call_id } : {}),
+        // Echo the assistant's declared tool_calls back so `tool` results can be
+        // bound to them (required by the OpenAI-compatible spec / Groq Harmony).
+        ...(m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0
+          ? { tool_calls: m.tool_calls }
+          : {}),
       })),
     };
     if (tools && tools.length > 0) {
@@ -94,7 +106,7 @@ export class XaiGrokProvider implements GrokProvider {
       }));
     }
 
-    const response = await this.fetchImpl(`${this.baseUrl}/chat/completions`, {
+    const response = await this.fetchImpl(`${this._baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

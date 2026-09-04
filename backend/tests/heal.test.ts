@@ -16,8 +16,8 @@ const baseInput: FailureDiagnosisInput = {
   affectedFiles: ["src/server.ts"],
 };
 
-test("heal: MAX_HEAL_ATTEMPTS is bounded to 3", () => {
-  assert.equal(MAX_HEAL_ATTEMPTS, 3);
+test("heal: MAX_HEAL_ATTEMPTS is bounded to 2", () => {
+  assert.equal(MAX_HEAL_ATTEMPTS, 2);
 });
 
 test("heal: failure diagnosis returns a concise parsed summary", async () => {

@@ -33,7 +33,10 @@ export default createTool<GetGitDiffInput>({
         files: diff.files.map((f) => ({
           path: f.path,
           status: f.status,
-          patch: f.patch.slice(0, 40_000),
+          // Bound the patch fed back to the model to keep the replayed history
+          // token-efficient (lockfile diffs can be large); the full diff is still
+          // captured for the migration report via captureDiff.
+          patch: f.patch.slice(0, 8_000),
           additions: f.additions,
           deletions: f.deletions,
         })),

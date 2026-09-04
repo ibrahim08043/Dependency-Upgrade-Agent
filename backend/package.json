@@ -8,7 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --env-file=.env --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts"
+    "test": "node --env-file=.env --import tsx --test --test-concurrency=1 tests/*.test.ts"
   },
   "dependencies": {
     "@dua/api-zod": "file:../shared/api-zod",

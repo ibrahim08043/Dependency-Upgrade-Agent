@@ -523,6 +523,79 @@ export function useGetRepository<TData = Awaited<ReturnType<typeof getRepository
 
 
 
+export const getGetRepositoryMigrationsUrl = (id: string,) => {
+
+
+
+
+  return `/api/repositories/${id}/migrations`
+}
+
+/**
+ * @summary List migrations for a repository
+ */
+export const getRepositoryMigrations = async (id: string, options?: RequestInit): Promise<Migration[]> => {
+
+  return customFetch<Migration[]>(getGetRepositoryMigrationsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+export const getGetRepositoryMigrationsQueryKey = (id: string,) => {
+    return [
+    `/api/repositories/${id}/migrations`
+    ] as const;
+    }
+
+
+export const getGetRepositoryMigrationsQueryOptions = <TData = Awaited<ReturnType<typeof getRepositoryMigrations>>, TError = ErrorType<unknown>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRepositoryMigrations>>, TError, TData>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRepositoryMigrationsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRepositoryMigrations>>> = ({ signal }) => getRepositoryMigrations(id, { signal });
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRepositoryMigrations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRepositoryMigrationsQueryResult = NonNullable<Awaited<ReturnType<typeof getRepositoryMigrations>>>
+export type GetRepositoryMigrationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List migrations for a repository
+ */
+
+export function useGetRepositoryMigrations<TData = Awaited<ReturnType<typeof getRepositoryMigrations>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRepositoryMigrations>>, TError, TData>, }
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRepositoryMigrationsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
 export const getListMigrationsUrl = () => {
 
 

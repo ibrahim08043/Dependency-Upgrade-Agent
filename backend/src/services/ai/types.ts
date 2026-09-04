@@ -20,11 +20,26 @@ export type ToolResult =
   | { ok: true; result: unknown }
   | { ok: false; errorType: string; message: string; path?: string };
 
+/** The OpenAI-compatible shape of a tool call emitted on an assistant message. */
+export interface AssistantToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
   /** tool call id that produced this message (role === "tool"). */
   tool_call_id?: string;
+  /**
+   * OpenAPI-compatible tool_calls array carried on an `assistant` message that
+   * precedes `tool` result messages. The OpenAI spec (enforced by strict
+   * providers such as Groq's Harmony templater) requires every `tool` message to
+   * follow an `assistant` message that DECLARES the matching tool call — without
+   * this, tool results have no declared call to bind to and the request fails.
+   */
+  tool_calls?: AssistantToolCall[];
 }
 
 export interface ToolCallRequest {
@@ -71,9 +86,10 @@ export function invalidXaiKeyReason(key: string): string | null {
   if (key.length < 20) {
     return "XAI_API_KEY looks too short to be a valid key.";
   }
-  if (/^(gsk_|sk-ant|sk-proj|sk-svcacct)/.test(key)) {
-    return "XAI_API_KEY does not look like an xAI key (it carries another provider's prefix). Expected a key starting with \"xai-\" from https://console.x.ai.";
+  if (/^(sk-ant|sk-proj|sk-svcacct)/.test(key)) {
+    return "XAI_API_KEY does not look like an xAI or Grok key (it carries another provider's prefix).";
   }
+  // gsk_ prefix is accepted — it's a Groq-format key used with the Groq API.
   return null;
 }
 
